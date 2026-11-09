@@ -15,7 +15,7 @@ import re
 from functools import lru_cache
 
 import pymupdf as fitz
-from langchain.chat_models import init_chat_model
+from .llm import make_model
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -125,8 +125,7 @@ def read_page(doc_id: str, page: int) -> str:
 
 @lru_cache(maxsize=1)
 def _ocr_model():
-    model = os.getenv("OCR_MODEL", os.getenv("RAG_MODEL", "anthropic:claude-opus-5-5"))
-    return init_chat_model(model, max_tokens=16000)
+    return make_model(os.getenv("OCR_MODEL") or os.getenv("RAG_MODEL") or None)
 
 
 OCR_PROMPT = """이 이미지는 PDF 한 페이지입니다. 페이지의 모든 텍스트를 정확히 전사하세요.

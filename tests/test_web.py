@@ -32,7 +32,8 @@ def test_upload_and_documents(client, sample_pdf, indexed_doc):
 
 
 def test_ask_returns_answer_and_steps(client, sample_pdf, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")
     monkeypatch.setattr(
         web, "run_agent",
         lambda path, q: {"answer": "87명입니다 (p.1)", "steps": [{"agent": "retrieval-agent", "task": q}]},

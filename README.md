@@ -22,7 +22,7 @@ main agent (진행 담당)
 
 ```bash
 uv sync
-cp .env.example .env   # ANTHROPIC_API_KEY 입력
+cp .env.example .env   # OPENAI_API_KEY / OPENAI_API_BASE / OPENAI_MODEL 입력
 ```
 
 ## 실행
@@ -40,9 +40,15 @@ uv run main.py 보고서.pdf               # CLI 대화형
 
 | 이름 | 기본값 | 설명 |
 |---|---|---|
-| `RAG_MODEL` | `anthropic:claude-opus-5-5` | 메인 에이전트 모델 |
+| `OPENAI_API_KEY` | (필수) | OpenAI 호환 엔드포인트 키 |
+| `OPENAI_API_BASE` | (필수) | 엔드포인트 주소 (예: `http://host:port/v1`) |
+| `OPENAI_MODEL` | `openai/gpt-oss-120b` | 기본 모델 |
+| `RAG_MODEL` | `OPENAI_MODEL` | 메인 에이전트 모델 |
 | `SUBAGENT_MODEL` | `RAG_MODEL` | 서브에이전트 모델 |
-| `OCR_MODEL` | `RAG_MODEL` | OCR에 쓰는 비전 모델 |
+| `OCR_MODEL` | `RAG_MODEL` | OCR에 쓰는 비전 모델 (이미지 입력 지원 필요) |
+| `MAX_TOKENS` | `8192` | 응답 최대 토큰 |
+
+모델 이름에 `anthropic:claude-...`처럼 provider 접두어를 붙이면 해당 provider로 생성합니다.
 | `PORT` | `8000` | 웹 서버 포트 |
 | `NO_BROWSER` | (없음) | `1`이면 브라우저를 자동으로 열지 않음 |
 

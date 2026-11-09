@@ -20,6 +20,7 @@ from pydantic import BaseModel
 load_dotenv()
 
 from rag import store  # noqa: E402
+from rag.llm import check_config  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT / "uploads"
@@ -106,8 +107,8 @@ def ask(req: AskRequest):
         raise HTTPException(404, f"파일 없음: {req.pdf_path}")
     if not req.question.strip():
         raise HTTPException(400, "질문을 입력하세요.")
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        raise HTTPException(500, "ANTHROPIC_API_KEY 가 설정되지 않았습니다. .env 파일을 확인하세요.")
+    if err := check_config():
+        raise HTTPException(500, err)
     try:
         return run_agent(req.pdf_path, req.question)
     except Exception as e:  # 에이전트 오류를 화면에 보여주기 위함

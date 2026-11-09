@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 
 from deepagents import create_deep_agent
-from langchain.chat_models import init_chat_model
+from .llm import make_model
 
 from .tools import (
     chunk_document,
@@ -71,14 +71,14 @@ MAIN_PROMPT = """당신은 PDF 문서 질의응답 오케스트레이터입니�
 사용자의 언어로 답하세요."""
 
 
-def _model(env: str, default: str):
-    return init_chat_model(os.getenv(env, default), max_tokens=16000)
+def _model(env: str):
+    return make_model(os.getenv(env) or None)
 
 
 def build_agent():
-    main_model = _model("RAG_MODEL", "anthropic:claude-opus-5-5")
+    main_model = _model("RAG_MODEL")
     # 서브에이전트는 단순 반복 작업이 많아 별도 모델로 바꿀 수 있게 둔다 (기본은 메인과 동일)
-    sub_model = _model("SUBAGENT_MODEL", os.getenv("RAG_MODEL", "anthropic:claude-opus-5-5"))
+    sub_model = make_model(os.getenv("SUBAGENT_MODEL") or os.getenv("RAG_MODEL") or None)
 
     subagents = [
         {

@@ -77,7 +77,8 @@ def test_ocr_pages_uses_vision_model(sample_pdf, monkeypatch):
 
 
 def test_build_agent(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")
     from rag.agent import build_agent
 
     assert build_agent() is not None
