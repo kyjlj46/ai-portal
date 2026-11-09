@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF RAG Agent</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #6b7280;
+    --line: #e3e6eb; --accent: #2f6fde; --accent-text: #fff; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171c; --card: #1d2128; --text: #e6e8ec; --muted: #9aa1ad;
+            --line: #2d323b; --accent: #5b8ff0; --accent-text: #0d1117; --warn: #f0b35b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.6 system-ui, "Malgun Gothic", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; }
+  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 24px; text-align: center;
+          color: var(--muted); cursor: pointer; }
+  .drop.over { border-color: var(--accent); color: var(--accent); }
+  select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg);
+                     border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+  textarea { resize: vertical; min-height: 70px; margin-top: 10px; }
+  button { font: inherit; background: var(--accent); color: var(--accent-text); border: 0;
+           border-radius: 6px; padding: 8px 18px; margin-top: 10px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .answer { white-space: pre-wrap; }
+  .steps { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+  .steps b { color: var(--text); }
+  .err { color: var(--warn); white-space: pre-wrap; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line);
+             border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;
+             vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>PDF RAG Agent</h1>
+  <p class="sub">PDF를 올리고 질문하면 파싱 → OCR → 청킹 → 검색 서브에이전트가 순서대로 처리합니다.</p>
+
+  <section class="card">
+    <h2>1. PDF 업로드</h2>
+    <label class="drop" id="drop">
+      PDF 파일을 끌어다 놓거나 클릭해서 선택
+      <input type="file" id="file" accept="application/pdf" hidden>
+    </label>
+    <div class="meta" id="uploadMsg"></div>
+  </section>
+
+  <section class="card">
+    <h2>2. 질문</h2>
+    <select id="doc"><option value="">문서를 선택하세요</option></select>
+    <div class="meta" id="docInfo"></div>
+    <textarea id="q" placeholder="예: 이 문서에서 연구 인력은 몇 명이야?"></textarea>
+    <button id="ask">질문하기</button>
+  </section>
+
+  <section class="card" id="resultCard" hidden>
+    <h2>답변</h2>
+    <div id="result" class="answer"></div>
+    <h2 style="margin-top:16px">처리 단계</h2>
+    <ol class="steps" id="steps"></ol>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let docs = [];
+
+async function loadDocs(selectPath) {
+  docs = await (await fetch("/api/documents")).json();
+  const sel = $("doc");
+  const known = new Set(docs.map(d => d.path));
+  // 업로드만 되고 아직 인덱싱 안 된 문서도 목록에 남긴다
+  [...sel.options].forEach(o => { if (o.value && !known.has(o.value)) docs.push({ path: o.value, filename: o.textContent, pending: true }); });
+  sel.innerHTML = '<option value="">문서를 선택하세요</option>' +
+    docs.map(d => `<option value="${d.path}">${d.filename}</option>`).join("");
+  if (selectPath) sel.value = selectPath;
+  showInfo();
+}
+
+function showInfo() {
+  const d = docs.find(x => x.path === $("doc").value);
+  $("docInfo").textContent = !d ? "" : d.pending || !d.chunks
+    ? "아직 인덱싱 전 — 첫 질문 때 자동으로 수집합니다 (시간이 걸립니다)."
+    : `${d.pages}페이지 · 청크 ${d.chunks}개 · OCR 페이지 ${d.ocr_pages.length ? d.ocr_pages.join(", ") : "없음"}`;
+}
+
+async function upload(file) {
+  if (!file) return;
+  $("uploadMsg").innerHTML = '<span class="spinner"></span>업로드 중…';
+  const fd = new FormData(); fd.append("file", file);
+  const res = await fetch("/api/upload", { method: "POST", body: fd });
+  const data = await res.json();
+  if (!res.ok) { $("uploadMsg").textContent = data.detail; return; }
+  $("uploadMsg").textContent = `업로드 완료: ${data.filename}` + (data.indexed ? " (이미 인덱싱됨)" : "");
+  const opt = new Option(data.filename, data.pdf_path); $("doc").add(opt);
+  await loadDocs(data.pdf_path);
+}
+
+$("file").onchange = (e) => upload(e.target.files[0]);
+const drop = $("drop");
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); upload(e.dataTransfer.files[0]); };
+$("doc").onchange = showInfo;
+
+$("ask").onclick = async () => {
+  const pdf_path = $("doc").value, question = $("q").value.trim();
+  if (!pdf_path || !question) { alert("문서와 질문을 입력하세요."); return; }
+  $("ask").disabled = true;
+  $("resultCard").hidden = false;
+  $("result").innerHTML = '<span class="spinner"></span>에이전트가 작업 중입니다…';
+  $("steps").innerHTML = "";
+  try {
+    const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ pdf_path, question }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
+    $("result").textContent = data.answer;
+    $("steps").innerHTML = data.steps.map(s => `<li><b>${s.agent}</b> — ${s.task.slice(0, 160)}</li>`).join("");
+  } catch (e) {
+    $("result").innerHTML = '<span class="err"></span>';
+    $("result").firstChild.textContent = `오류: ${e.message}`;
+  } finally {
+    $("ask").disabled = false;
+    loadDocs(pdf_path);
+  }
+};
+
+loadDocs();
+</script>
+</body>
+</html>

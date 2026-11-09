@@ -1,0 +1,79 @@
+"""문서/페이지/청크를 디스크(JSON)에 저장하는 아주 단순한 저장소.
+
+data/<doc_id>/
+  meta.json      : 원본 경로, 페이지 수, 페이지별 진단 정보
+  pages/<n>.json : 페이지 텍스트 + 출처(text|ocr) + 품질 점수
+  chunks.json    : 청크 목록
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+
+def doc_id_for(pdf_path: str | Path) -> str:
+    h = hashlib.sha1(Path(pdf_path).read_bytes()).hexdigest()
+    return h[:10]
+
+
+def doc_dir(doc_id: str) -> Path:
+    return DATA_DIR / doc_id
+
+
+def _write(path: Path, obj) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _read(path: Path, default=None):
+    if not path.exists():
+        return default
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_meta(doc_id: str, meta: dict) -> None:
+    _write(doc_dir(doc_id) / "meta.json", meta)
+
+
+def load_meta(doc_id: str) -> dict:
+    meta = _read(doc_dir(doc_id) / "meta.json")
+    if meta is None:
+        raise ValueError(f"알 수 없는 doc_id: {doc_id}. 먼저 inspect_pdf 를 실행하세요.")
+    return meta
+
+
+def save_page(doc_id: str, page: int, text: str, source: str, quality: float) -> None:
+    _write(
+        doc_dir(doc_id) / "pages" / f"{page}.json",
+        {"page": page, "text": text, "source": source, "quality": quality},
+    )
+
+
+def load_page(doc_id: str, page: int) -> dict | None:
+    return _read(doc_dir(doc_id) / "pages" / f"{page}.json")
+
+
+def load_pages(doc_id: str) -> list[dict]:
+    pages_dir = doc_dir(doc_id) / "pages"
+    if not pages_dir.exists():
+        return []
+    pages = [_read(p) for p in pages_dir.glob("*.json")]
+    return sorted(pages, key=lambda p: p["page"])
+
+
+def save_chunks(doc_id: str, chunks: list[dict]) -> None:
+    _write(doc_dir(doc_id) / "chunks.json", chunks)
+
+
+def load_chunks(doc_id: str) -> list[dict]:
+    return _read(doc_dir(doc_id) / "chunks.json", [])
+
+
+def list_doc_ids() -> list[str]:
+    if not DATA_DIR.exists():
+        return []
+    return sorted(p.name for p in DATA_DIR.iterdir() if (p / "meta.json").exists())
