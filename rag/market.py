@@ -36,6 +36,7 @@ class MarketAgent:
     tools: list[str] = field(default_factory=list)  # 추가 도구 (extra_tools.TOOLS 의 이름)
     preload: bool | None = None  # 짧은 문서 전문을 요청에 붙일지 (None 이면 uses_doc 을 따른다)
     on_upload: str = ""  # 이 화면에서 문서를 올리거나 고르면 바로 보낼 요청 (비우면 사용자가 직접 요청)
+    parallel: bool = False  # '순서대로' 실행에서 이웃한 병렬 가능 Agent 와 동시에 돌려도 되는지 (앞 결과만 읽는 분석형)
     custom: bool = False  # 사용자가 만든 Agent (rag/custom_agents.py)
     version: str = ""  # 바뀌면 만들어 둔 에이전트를 다시 만든다 (편집)
 
@@ -50,7 +51,10 @@ MARKET: list[MarketAgent] = [
         "translator", "번역", "🌐", "언어",
         "한국어↔영어·일본어·중국어 등 자연스러운 번역. 용어를 일관되게, 서식(제목·표·목록)은 그대로 둡니다.",
         _p("전문 번역가", """
-- 대상 언어가 지정되지 않으면 한국어는 영어로, 그 외 언어는 한국어로 옮깁니다.
+- 요청에 대상 언어('한국어로', '영어로' 등)가 적혀 있으면 반드시 그 언어로 옮깁니다.
+- 원문 언어는 지시문이 아니라 번역할 본문의 언어로 판단합니다 (한국어 지시 + 영어 본문이면 영어 원문입니다).
+- 대상 언어가 없으면 본문이 한국어일 때는 영어로, 그 외 언어일 때는 한국어로 옮깁니다.
+- 결과가 원문과 같은 언어 그대로이면 번역하지 않은 것입니다. 원문을 그대로 돌려주지 마세요.
 - 직역보다 자연스러운 문장을 쓰되 의미·수치·고유명사는 정확히 유지합니다.
 - 제목·목록·표 등 마크다운 구조와 줄바꿈을 원문대로 유지합니다.
 - 전문 용어는 처음 나올 때 '번역어(원어)' 로 쓰고, 같은 용어는 끝까지 같은 번역어로 씁니다.
@@ -114,6 +118,7 @@ MARKET: list[MarketAgent] = [
 - 담당·기한이 원문에 없으면 [미정]."""),
         examples=["이 문서에서 할 일만 뽑아줘"],
         new=True,
+        parallel=True,
     ),
     MarketAgent(
         "keywords", "키워드·태그 추출", "🏷️", "분석",
@@ -129,6 +134,7 @@ MARKET: list[MarketAgent] = [
 ## 한 줄 설명"""),
         examples=["이 문서의 핵심 키워드와 태그를 뽑아줘"],
         new=True,
+        parallel=True,
     ),
     MarketAgent(
         "sentiment", "감성·여론 분석", "📈", "분석",
@@ -144,6 +150,7 @@ MARKET: list[MarketAgent] = [
 - 비율은 실제로 센 값으로 쓰고, 의견이 적으면 그 사실을 밝힙니다."""),
         examples=["다음 리뷰들을 분석해줘: 배송 빨라요 / 포장이 엉망 / 가격 대비 괜찮음 / 고객센터 연결이 안 돼요"],
         new=True,
+        parallel=True,
     ),
     MarketAgent(
         "swot", "SWOT 분석", "🧭", "분석",
@@ -162,6 +169,7 @@ MARKET: list[MarketAgent] = [
 - 입력·문서에 근거한 항목만 쓰고, 추정이면 '(추정)' 을 붙입니다."""),
         examples=["사내 AI 문서 검색 도입에 대한 SWOT 분석해줘"],
         new=True,
+        parallel=True,
     ),
     MarketAgent(
         "slides", "발표자료 개요", "🖥️", "업무",
@@ -191,6 +199,7 @@ MARKET: list[MarketAgent] = [
         uses_doc=False,
         examples=["orders(id, user_id, amount, created_at) 에서 월별 매출 합계와 전월 대비 증감률"],
         new=True,
+        parallel=True,
     ),
     MarketAgent(
         "quick_summary", "업로드 즉시 요약", "⚡", "문서",
@@ -276,6 +285,7 @@ MARKET: list[MarketAgent] = [
         tools=["web_search", "fetch_url"],
         examples=["vLLM 최신 버전의 주요 변경 사항은?", "2026년 AI 반도체 정부 지원 정책 정리해줘"],
         new=True,
+        parallel=True,
     ),
     # ── 기존 기능을 부품으로 ──
     MarketAgent(

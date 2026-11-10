@@ -316,6 +316,10 @@
   .doc-out { border-top: 1px solid var(--line); padding-top: 12px; }
   .cursor::after { content: "▍"; animation: blink 1s steps(1) infinite; color: var(--accent); }
   .err { color: var(--warn); white-space: pre-wrap; }
+  .errbox, .warnbox { border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); border-radius: 10px; padding: 10px 12px;
+                      background: color-mix(in srgb, var(--warn) 8%, var(--card)); display: grid; gap: 4px; font-size: 14px; }
+  .warnbox { margin-top: 10px; } .warnbox ul { margin: 0; padding-left: 18px; color: var(--text); }
+  .errbox details { font-size: 12px; color: var(--muted); } .errbox code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
   .cite { display: inline-block; font-size: 12px; line-height: 1.5; padding: 0 6px; margin: 0 1px;
           border-radius: 9px; background: var(--accent); color: var(--accent-text); cursor: pointer;
           text-decoration: none; white-space: nowrap; }
@@ -1844,10 +1848,16 @@ async function run(body, userText) {
           setComposer(`이어서 질문 (${current.revise_hint})`, "같은 이미지에 대해 이어서 묻습니다 · 새 이미지를 끌어다 놓거나 붙여넣으면 새로 분석합니다");
         }
         addMailBar(b, ev.answer);  // 메일 초안이 있으면 📤 메일 보내기
+        if (ev.warnings?.length) {  // 일부 단계 실패·실행 방식 전환 등 알릴 것
+          const w = el("div", "warnbox"); w.setAttribute("role", "status");
+          w.append(el("b", null, "⚠ 알림"));
+          const ul = el("ul"); ev.warnings.forEach(t => ul.append(el("li", null, t))); w.append(ul);
+          b.ans.after(w);
+        }
         renderSources(b, ev.doc_id, ev.sources || []);
         finishTrace(b, "ok");
         follow();
-      } else if (ev.type === "error") throw new Error(ev.message);
+      } else if (ev.type === "error") throw Object.assign(new Error(ev.message), { detail: ev.detail });
     });
     if (!gotFinal) throw new Error("연결이 끊겼습니다.");
   } catch (e) {
@@ -1858,7 +1868,15 @@ async function run(body, userText) {
       if (!b.draft) b.ans.textContent = "(중지했습니다)";
     } else {
       b.ans.className = "answer";
-      b.ans.replaceChildren(el("span", "err", `오류: ${e.message}`));
+      // 답이 안 나온 이유를 보여준다 (원인 + 기술 정보는 접어서)
+      const box = el("div", "errbox");
+      box.setAttribute("role", "alert");
+      box.append(el("b", null, "⚠ 답을 만들지 못했습니다"), el("div", "err", e.message || "알 수 없는 오류"));
+      if (e.detail && e.detail !== e.message) {
+        const d = el("details"); d.append(el("summary", null, "기술 정보"), el("code", null, e.detail));
+        box.append(d);
+      }
+      b.ans.replaceChildren(box);
     }
     if ((current.mode === "form" || current.mode === "image") && !produced && agent === current) {
       const again = el("button", "btn", "양식으로 돌아가기");

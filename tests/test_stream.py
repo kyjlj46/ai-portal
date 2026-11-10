@@ -80,7 +80,8 @@ def test_ask_stream_reports_errors(sample_pdf, monkeypatch):
 
     monkeypatch.setattr(stream, "get_agent", lambda *a: Broken())
     out = list(stream.ask_stream(str(sample_pdf), "q"))
-    assert out[-1] == {"type": "error", "message": "ConnectionError: endpoint down"}
+    assert out[-1]["type"] == "error" and out[-1]["detail"] == "ConnectionError: endpoint down"
+    assert "모델 서버에 연결하지 못했습니다" in out[-1]["message"]  # 원인을 사용자가 알 수 있게
 
 
 def test_form_agent_without_document_skips_ingest_and_sources(monkeypatch):

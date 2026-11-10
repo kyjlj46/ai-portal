@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -92,22 +93,73 @@ FOLLOWUP = "지금까지 찾은 근거만으로 사용자 질문에 대한 최�
 _TOOL_STUB = re.compile(r"\[?\s*[a-z][a-z_]{2,}(?:\s*\(.*\)|(?:\s+[\w-]+\s*=\s*\S+)+)\s*\]?", re.S)
 
 
+# 도구 인자로 쓰이는 키들 — 답이 이런 키만 가진 JSON 이면 도구 호출을 글로 흉내 낸 것 ({"description": "Translate …"})
+_TOOL_ARG_KEYS = {
+    "description", "subagent_type", "query", "url", "doc_id", "page", "pages", "chunk_id", "k", "max_results",
+    "chunk_size", "chunk_overlap", "dpi", "window", "start", "count", "max_chars", "todos", "name", "arguments", "args",
+}
+
+
+class NoAnswerError(RuntimeError):
+    """모델이 쓸 수 있는 답을 내지 못했다 (빈 답, 도구 호출 흉내만 남김)."""
+
+
 def is_tool_stub(text: str) -> bool:
-    """도구를 실제로 부르지 않고 '[read_page page=2]' 처럼 호출 흉내만 글로 쓴 응답인지."""
-    return len(text) < 160 and bool(_TOOL_STUB.fullmatch(text.strip()))
+    """도구를 실제로 부르지 않고 '[read_page page=2]' 나 '{"description": …}' 처럼 호출 흉내만 글로 쓴 응답인지."""
+    t = text.strip()
+    if len(t) < 160 and _TOOL_STUB.fullmatch(t):
+        return True
+    if t.startswith("{"):
+        try:
+            obj = json.loads(t)
+        except ValueError:  # 잘리거나 깨진 JSON: 도구 인자 키로 시작하면 흉내로 본다
+            return bool(re.match(r'\{\s*"(description|subagent_type|query|url|doc_id)"\s*:', t))
+        return isinstance(obj, dict) and bool(obj) and set(obj) <= _TOOL_ARG_KEYS
+    return False
+
+
+def answer_state(messages: list) -> str:
+    """마지막 턴의 답 상태: 'ok' (쓸 수 있는 답), 'stub' (도구 호출 흉내), 'none' (답 없음)."""
+    for msg in reversed(messages):
+        if isinstance(msg, AIMessage) and not msg.tool_calls and msg.text.strip():
+            return "stub" if is_tool_stub(msg.text) else "ok"
+        if isinstance(msg, HumanMessage):
+            break
+    return "none"
 
 
 def final_answer(messages: list, followup: str = FOLLOWUP) -> str:
-    """마지막 AI 메시지의 본문. 모델이 본문 없이 끝냈거나 도구 호출 흉내만 남겼으면 한 번 더 최종 답변을 요청한다."""
-    for msg in reversed(messages):
-        if isinstance(msg, AIMessage) and not msg.tool_calls and msg.text.strip():
-            if is_tool_stub(msg.text):
+    """마지막 AI 메시지의 본문. 모델이 본문 없이 끝냈거나 도구 호출 흉내만 남겼으면 한 번 더 최종 답변을 요청한다.
+
+    그래도 쓸 수 있는 답이 없으면 NoAnswerError (원인을 담아서) — 흉내 낸 글을 답으로 보여주지 않는다.
+    """
+    state = answer_state(messages)
+    if state == "ok":
+        for msg in reversed(messages):
+            if isinstance(msg, AIMessage) and not msg.tool_calls and msg.text.strip():
+                return normalize_citations(msg.text.strip())
+    import time
+
+    from .stream import MAX_ATTEMPTS, RETRY_DELAY, retryable
+
+    ask = _text_only(messages) + [HumanMessage(followup)]
+    last: Exception | None = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):  # 빈 답·도구 흉내·일시적 오류면 최대 3번
+        try:
+            text = _model("RAG_MODEL").invoke(ask).text.strip()
+            if not text:
+                raise NoAnswerError("모델이 빈 답을 돌려줬습니다" + (" (앞서 도구 호출 형식만 출력함)" if state == "stub" else "") + ".")
+            if is_tool_stub(text):
+                raise NoAnswerError(f"모델이 답 대신 도구 호출 형식만 출력했습니다: {text[:120]}")
+            return normalize_citations(text)
+        except Exception as e:  # noqa: BLE001
+            last = e
+            if attempt == MAX_ATTEMPTS or not retryable(e):
                 break
-            return normalize_citations(msg.text.strip())
-        if isinstance(msg, HumanMessage):
-            break
-    reply = _model("RAG_MODEL").invoke(_text_only(messages) + [HumanMessage(followup)])
-    return normalize_citations(reply.text.strip()) or "답변을 생성하지 못했습니다. 질문을 바꿔 다시 시도해 주세요."
+            time.sleep(RETRY_DELAY * attempt)
+    if isinstance(last, NoAnswerError) and MAX_ATTEMPTS > 1:
+        raise NoAnswerError(f"{last} ({MAX_ATTEMPTS}번 시도)") from last
+    raise last
 
 
 # 모델마다 출처 표기가 제각각이라 (p.N) 한 가지로 맞춘다: 【p.3】, [p.3], 【p.3†L1-L5】, (p. 3, p.5) …

@@ -183,8 +183,11 @@ def test_web_sources_are_appended_from_pages_actually_read():
             ToolMessage("페이지를 읽지 못했습니다 (HTTP 404).", tool_call_id="3", name="fetch_url"),
             ToolMessage("[1] 검색 결과\nhttps://x.org", tool_call_id="4", name="web_search")]
     out = add_web_sources("기본값은 512입니다 [1].", msgs)
-    assert out.endswith("## 출처 (읽은 페이지)\n1. [vLLM 문서](https://docs.vllm.ai/perf)")
-    assert add_web_sources("답 [출처](https://a.com)", msgs) == "답 [출처](https://a.com)"  # 이미 링크가 있으면 그대로
+    assert out.endswith("## 출처 (관련 기사·읽은 페이지)\n- [vLLM 문서](https://docs.vllm.ai/perf)\n- [검색 결과](https://x.org)")
+    assert out.count("docs.vllm.ai") == 1  # 같은 주소는 한 번만
+    # 답에 이미 있는 링크는 빼고, 없는 것만 더한다 (모델이 링크를 일부만 옮겨도 출처가 빠지지 않게)
+    part = add_web_sources("답 [vLLM](https://docs.vllm.ai/perf)", msgs)
+    assert part.endswith("## 출처 (추가)\n- [검색 결과](https://x.org)") and part.count("docs.vllm.ai") == 1
     assert add_web_sources("답", []) == "답"
 
 

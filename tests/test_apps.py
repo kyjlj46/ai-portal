@@ -1,5 +1,7 @@
 """Agent 마켓 · 커스텀 앱(DeepAgent 하위 에이전트 조합)."""
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -117,6 +119,8 @@ def test_app_stream_gets_today_and_conversation_cleanup(client, monkeypatch):
 
         def stream(self, inputs, **kw):
             Fake.inputs = inputs
+            call = AIMessage("", tool_calls=[{"name": "task", "args": {"subagent_type": "minutes", "description": "정리"}, "id": "t1"}])
+            yield (), "updates", {"model": {"messages": [call]}}  # 팀에 맡긴 뒤
             yield (), "updates", {"model": {"messages": [AIMessage("# 회의록\n- 결과")]}}
 
     monkeypatch.setattr(stream, "get_agent", lambda *a: Fake())
@@ -160,7 +164,7 @@ class StepAgent:
     def __init__(self, name):
         self.name = name
 
-    def invoke(self, inputs):
+    def invoke(self, inputs, config=None):
         from langchain_core.messages import AIMessage
 
         StepAgent.seen.append((self.name, inputs["messages"][-1].content))
@@ -179,7 +183,7 @@ def test_pipeline_runs_every_agent_in_order_and_passes_results(client, monkeypat
     assert [n for n, _ in StepAgent.seen] == ["m:minutes", "m:action_items", "m:email"]
     first, third = StepAgent.seen[0][1], StepAgent.seen[2][1]
     assert "요청: 메모: 오픈 연기" in first and "[앱 지시사항]\n순서대로" in first and "오늘: " in first
-    assert "1/3 단계 '회의록 정리'" in first and "다음 단계(할 일 추출, 이메일 작성)" in first
+    assert "1/3 단계 '회의록 정리'" in first and "다른 단계(할 일 추출, 이메일 작성)" in first
     assert "[앞 단계 결과: 🗒️ 회의록 정리]" in third and "[앞 단계 결과: ✅ 할 일 추출]" in third  # 앞 결과를 넘김
     delegates = [e["text"] for e in out if e.get("kind") == "delegate"]
     assert delegates == ["1/3 🗒️ 회의록 정리 작업 중…", "2/3 ✅ 할 일 추출 작업 중…", "3/3 📧 이메일 작성 작업 중…"]
@@ -211,12 +215,69 @@ def test_auto_mode_uses_deepagent_orchestrator(client, monkeypatch):
 
     class Orchestrator:
         def stream(self, inputs, **kw):
+            call = AIMessage("", tool_calls=[{"name": "task", "args": {"subagent_type": "minutes", "description": "정리"}, "id": "t1"}])
+            yield (), "updates", {"model": {"messages": [call]}}  # 팀에 맡긴 뒤
             yield (), "updates", {"model": {"messages": [AIMessage("총괄 결과\n```markdown\n# 메일\n본문\n```")]}}
 
     used = []
     monkeypatch.setattr(stream, "get_agent", lambda agent_id: used.append(agent_id) or Orchestrator())
     final = _run(app["id"], "메모")[-1]
     assert used == [f"app:{app['id']}"] and final["answer"] == "총괄 결과\n# 메일\n본문"
+
+
+def test_auto_mode_falls_back_to_pipeline_when_orchestrator_fails(client, monkeypatch):
+    """총괄 에이전트가 하위 에이전트 호출을 JSON 글로만 남기면(실제 사례) 그 글을 답으로 보여주지 않고 '순서대로' 로 처리한다."""
+    from langchain_core.messages import AIMessage
+
+    app = client.post("/api/apps", json={**APP, "run": "auto"}).json()
+    stub = json.dumps({"description": "Translate the following English text into Korean…"})
+
+    class Orchestrator:
+        def stream(self, inputs, **kw):
+            yield (), "updates", {"model": {"messages": [AIMessage(stub)]}}
+
+    StepAgent.seen = []
+    monkeypatch.setattr(stream, "get_agent", lambda agent_id: Orchestrator() if agent_id.startswith("app:") else StepAgent(agent_id))
+    out = _run(app["id"], "메모")
+    final = out[-1]
+    assert [n for n, _ in StepAgent.seen] == ["m:minutes", "m:action_items", "m:email"]  # 팀 전원이 순서대로
+    assert "description" not in final["answer"] and "## 🗒️ 회의록 정리" in final["answer"]
+    assert "호출 내용(JSON)만 글로 남겼습니다" in final["warnings"][0]
+    assert any("순서대로" in e.get("text", "") for e in out if e["type"] == "step")
+
+
+def test_pipeline_step_failure_is_reported_and_others_continue(client, monkeypatch):
+    app = client.post("/api/apps", json=APP).json()
+
+    class Broken:
+        calls = 0
+
+        def invoke(self, inputs, config=None):
+            Broken.calls += 1
+            raise TimeoutError("read timed out")
+
+    StepAgent.seen = []
+    monkeypatch.setattr(stream, "get_agent", lambda agent_id: Broken() if agent_id == "m:action_items" else StepAgent(agent_id))
+    out = _run(app["id"], "메모")
+    final = out[-1]
+    assert final["type"] == "final" and [n for n, _ in StepAgent.seen] == ["m:minutes", "m:email"]  # 나머지는 계속
+    assert "✅ 할 일 추출 단계 실패 — 모델 응답이 너무 오래 걸려" in final["warnings"][0]
+    assert "> ⚠ 이 단계는 실패했습니다" in final["answer"]
+    assert any("⚠ 할 일 추출 실패" in e.get("text", "") for e in out)
+
+    monkeypatch.setattr(stream, "get_agent", lambda agent_id: Broken())
+    err = _run(app["id"], "메모")[-1]
+    assert err["type"] == "error" and err["message"].startswith("모든 단계가 실패했습니다")  # 원인 목록과 함께
+
+
+def test_tool_stub_detection():
+    from rag.agent import is_tool_stub
+
+    assert is_tool_stub('{"description": "Translate the following text"}')
+    assert is_tool_stub('{"subagent_type": "translator", "description": "x"}')
+    assert is_tool_stub('{"description": "Translate the following English text into Korean, preserving')  # 잘린 JSON
+    assert not is_tool_stub('{"name": "계약리스크", "role": "x"}')  # 도구 인자가 아닌 JSON 은 답일 수 있다
+    assert not is_tool_stub("## 결과\n- 내용")
 
 
 def test_unwrap_prose_fences_keeps_code():
@@ -227,3 +288,122 @@ def test_unwrap_prose_fences_keeps_code():
     assert unwrap_prose_fences(sql) == sql
     assert unwrap_prose_fences("```\nfor i in range(3): print(i)\n```").startswith("```")
     assert demote_headings("# A\n```\n# 주석\n```\n## B") == "### A\n```\n# 주석\n```\n#### B"
+
+
+# ─────────────────────────── 병렬 · 재시도 · 반복 한도 ───────────────────────────
+
+
+def test_stages_group_independent_analysis_agents():
+    assert stream.stages(["translator", "sentiment", "keywords", "web_search"]) == [["translator"], ["sentiment", "keywords", "web_search"]]
+    assert stream.stages(["minutes", "action_items", "email"]) == [["minutes"], ["action_items"], ["email"]]  # 메일은 앞 결과를 모두 써야
+    assert stream.stages(["keywords", "translator", "sentiment", "proofreader", "web_search"]) == [
+        ["keywords"], ["translator"], ["sentiment"], ["proofreader"], ["web_search"]]
+
+
+def test_parallel_stage_runs_concurrently_and_gets_previous_results(client, monkeypatch):
+    import threading
+    import time as _time
+
+    from langchain_core.messages import AIMessage
+
+    app = client.post("/api/apps", json={**APP, "agents": ["translator", "sentiment", "keywords", "web_search"]}).json()
+    seen, active, peak = {}, [0], [0]
+    lock = threading.Lock()
+
+    class Slow:
+        def __init__(self, name):
+            self.name = name
+
+        def invoke(self, inputs, config=None):
+            assert config == {"recursion_limit": stream.STEP_LIMIT}  # 단계마다 반복 한도
+            with lock:
+                active[0] += 1
+                peak[0] = max(peak[0], active[0])
+            seen[self.name] = inputs["messages"][-1].content
+            _time.sleep(0.3)
+            with lock:
+                active[0] -= 1
+            return {"messages": [*inputs["messages"], AIMessage(f"{self.name} 결과")]}
+
+    monkeypatch.setattr(stream, "get_agent", lambda agent_id: Slow(agent_id))
+    t0 = _time.time()
+    out = list(stream.ask_stream(None, "기사", None, agent_id=f"app:{app['id']}"))
+    took = _time.time() - t0
+    assert peak[0] == 3 and took < 1.0  # 감성·키워드·웹 검색은 동시에 (따로면 1.2초 이상)
+    assert "[앞 단계 결과: 🌐 번역]" in seen["m:keywords"] and "sentiment 결과" not in seen["m:keywords"]  # 형제 결과는 안 받음
+    assert "(동시 실행)" in " ".join(e.get("text", "") for e in out)
+    ans = out[-1]["answer"]
+    assert ans.index("## 🌐 번역") < ans.index("## 📈 감성") < ans.index("## 🏷️ 키워드") < ans.index("## 🌍 웹 검색")  # 순서 유지
+
+
+def test_step_retries_up_to_three_times(client, monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    app = client.post("/api/apps", json={**APP, "agents": ["minutes", "email"]}).json()
+    calls = {"m:minutes": 0}
+
+    class Flaky:
+        def __init__(self, name):
+            self.name = name
+
+        def invoke(self, inputs, config=None):
+            if self.name == "m:minutes":
+                calls["m:minutes"] += 1
+                if calls["m:minutes"] < 3:
+                    raise ConnectionError("connection refused")
+            return {"messages": [*inputs["messages"], AIMessage(f"{self.name} 결과")]}
+
+    monkeypatch.setattr(stream, "get_agent", lambda agent_id: Flaky(agent_id))
+    out = list(stream.ask_stream(None, "메모", None, agent_id=f"app:{app['id']}"))
+    assert calls["m:minutes"] == 3 and out[-1]["type"] == "final" and out[-1]["warnings"] == []  # 세 번째에 성공
+    assert sum("다시 시도" in e.get("text", "") for e in out) == 2
+
+    calls["m:minutes"] = -10  # 계속 실패 → 3번에서 멈춘다 (무한 재시도 없음)
+    out = list(stream.ask_stream(None, "메모", None, agent_id=f"app:{app['id']}"))
+    assert calls["m:minutes"] == -7 and "3번 시도" in out[-1]["warnings"][0] and "m:email 결과" in out[-1]["answer"]
+
+
+def test_final_answer_retries_then_reports(monkeypatch):
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from rag import agent
+
+    replies = iter(["", '{"description": "x"}', "## 답"])
+
+    class Model:
+        n = 0
+
+        def invoke(self, msgs):
+            Model.n += 1
+            return AIMessage(next(replies))
+
+    monkeypatch.setattr(agent, "_model", lambda env: Model())
+    assert agent.final_answer([HumanMessage("q")]) == "## 답" and Model.n == 3  # 빈 답·흉내 뒤 세 번째에
+
+    monkeypatch.setattr(agent, "_model", lambda env: type("M", (), {"invoke": lambda self, m: AIMessage("")})())
+    with pytest.raises(agent.NoAnswerError, match="3번 시도"):
+        agent.final_answer([HumanMessage("q")])
+
+
+def test_orchestrator_loop_is_capped(client, monkeypatch):
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    app = client.post("/api/apps", json={**APP, "run": "auto"}).json()
+    produced = []
+
+    class Looping:
+        def stream(self, inputs, config=None, **kw):
+            assert config == {"recursion_limit": stream.AGENT_LIMIT}
+            for i in range(50):  # 같은 팀원에게 끝없이 맡기는 총괄
+                produced.append(i)
+                call = AIMessage("", tool_calls=[{"name": "task", "args": {"subagent_type": "minutes", "description": "정리"}, "id": f"t{i}"}])
+                yield (), "updates", {"model": {"messages": [call]}}
+                yield (), "updates", {"tools": {"messages": [ToolMessage(f"회의록 {i}", tool_call_id=f"t{i}", name="task")]}}
+
+    monkeypatch.setattr(stream, "get_agent", lambda agent_id: Looping())
+    monkeypatch.setattr("rag.agent._model", lambda env: type("M", (), {"invoke": lambda self, m: AIMessage("## 지금까지 결과 정리")})())
+    out = list(stream.ask_stream(None, "메모", None, agent_id=f"app:{app['id']}"))
+    assert len(produced) == stream.TASK_CAP_PER_AGENT + 1  # 한도를 넘는 순간 멈춘다
+    final = out[-1]
+    assert final["type"] == "final" and final["answer"] == "## 지금까지 결과 정리"
+    assert "반복 한도" in final["warnings"][0]

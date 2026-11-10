@@ -146,7 +146,7 @@ def test_pipeline_with_two_documents(two_docs, sample_pdf, client, monkeypatch):
         def __init__(self, name):
             self.name = name
 
-        def invoke(self, inputs):
+        def invoke(self, inputs, config=None):
             seen.append(inputs["messages"][-1].content)
             return {"messages": [*inputs["messages"], AIMessage(f"{self.name}: 예산 30억 ({store.label_for(b)} p.1)")]}
 
