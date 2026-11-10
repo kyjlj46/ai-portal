@@ -3,6 +3,7 @@
 data/<doc_id>/
   meta.json      : 원본 경로, 페이지 수, 페이지별 진단 정보
   pages/<n>.json : 페이지 텍스트 + 출처(text|ocr) + 품질 점수
+  raw/<n>.txt    : LLM 정리 전 OCR 원문
   chunks.json    : 청크 목록
 """
 
@@ -51,6 +52,21 @@ def save_page(doc_id: str, page: int, text: str, source: str, quality: float) ->
         doc_dir(doc_id) / "pages" / f"{page}.json",
         {"page": page, "text": text, "source": source, "quality": quality},
     )
+
+
+def save_raw(doc_id: str, page: int, raw: str) -> None:
+    """LLM 정리 전 OCR 원문 (디버깅/검수용)."""
+    path = doc_dir(doc_id) / "raw" / f"{page}.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(raw, encoding="utf-8")
+
+
+def clear_pages(doc_id: str) -> None:
+    """재수집 전에 이전 페이지/청크 결과를 지운다."""
+    for sub in ("pages", "raw"):
+        for f in (doc_dir(doc_id) / sub).glob("*"):
+            f.unlink()
+    (doc_dir(doc_id) / "chunks.json").unlink(missing_ok=True)
 
 
 def load_page(doc_id: str, page: int) -> dict | None:

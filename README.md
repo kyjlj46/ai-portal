@@ -1,22 +1,64 @@
 # pdf-rag-agent
 
-[LangChain deep-agents](https://github.com/langchain-ai/deepagents)로 만든 간단한 PDF RAG입니다.
-파싱, OCR, 청킹, 검색을 서로 다른 서브에이전트에 나눠 맡깁니다. 각 서브에이전트는 자기 단계의 도구만 가지고 결과를 직접 확인하므로, 단계가 섞이지 않아 답이 더 정확해집니다.
+[LangChain deep-agents](https://github.com/langchain-ai/deepagents)로 만든 간단한 문서 RAG입니다.
+문서의 모든 페이지를 이미지로 OCR하고, LLM이 표·띄어쓰기·읽기 순서를 정리해서 인덱싱합니다. 발표 장표처럼 텍스트 레이어가 깨진 문서도 읽을 수 있습니다.
+
+## 업무 에이전트 (웹 메인 화면의 카드)
+
+| 카드 | 문서 | 화면 | 하는 일 |
+|---|---|---|---|
+| 💬 문서 Q&A | 필수 | 채팅 | 문서를 검색해 출처(p.N)와 함께 답변 |
+| 📝 문서 요약 | 필수 | 양식 → 수정 요청 | 분량(한 줄/핵심/상세)·형식(개조식/서술형)·중점 관점에 맞춰 요약 |
+| 📊 보고서 작성 | 선택 | 양식 → 수정 요청 | 개요 / 현황 / 분석 / 향후 계획 4장 구성 보고서 |
+| 🖋️ 결재 기안 | 선택 | 양식 → 수정 요청 | 결재선·예산표가 들어간 기안문 (1. 목적 ~ 6. 요청 사항, 붙임) |
+| 📰 뉴스 기사 작성 | 선택 | 양식 → 수정 요청 | 주요 신문사 논조(10종)와 기사 유형(스트레이트·해설·기획·사설·인터뷰)을 골라 기사 초안 작성 |
+| 🖼️ 이미지 분석 | 없음 | 이미지 올리기 → 이어서 질문 | 스크린샷·사진·차트·표 이미지의 글자를 OCR 로 읽고 분석 (전체 분석 / 글자 추출 / 표·차트 해석 / 문서·화면 검토) |
+| ⚫ 오목 게임 | 없음 | 미니게임 | 15×15 판에서 AI 와 대국 (흑·백 선택, 쉬움·보통·어려움, 무르기, 전적) |
+
+- **Agent 마켓 (오른쪽 패널, 🧩 버튼)**: 단독으로 쓰거나 앱에 담을 수 있는 Agent 15개 — 새로 추가한 번역·교정·윤문·이메일 작성·회의록 정리·할 일 추출·키워드·태그 추출·감성·여론 분석·SWOT 분석·발표자료 개요·SQL 작성(10개)과 기존 문서 검색·요약·보고서·결재 기안·뉴스 기사. 검색과 분류 필터가 있고, 넓은 화면에서는 오른쪽 열, 좁은 화면에서는 서랍으로 열립니다. 목록은 [rag/market.py](rag/market.py) 의 `MARKET`.
+- **커스텀 앱 만들기 (＋ 새 앱 만들기)**: 마켓의 Agent 를 끌어다 '팀' 에 놓거나 ＋ 담기로 1~8개를 담아 하나의 DeepAgent 앱을 만듭니다. 이름·아이콘·설명·지시사항·문서 사용(안 함/선택/필수)·예시 요청을 정하고 순서를 바꿀 수 있으며, 추천 조합 4가지로 시작할 수도 있습니다. 앱은 `data/apps/<id>.json` 에 저장되고 왼쪽 메뉴·홈의 '내 앱' 에 나타납니다.
+  - 실행 방식 ⛓ 순서대로(기본): 담은 순서대로 모든 Agent 를 실행하고 앞 단계 결과를 다음 단계에 넘깁니다. 결과는 '모든 단계' 또는 '마지막 결과만(중간 결과는 접어서)'.
+  - 실행 방식 🧠 총괄 에이전트가 판단: DeepAgent 총괄 에이전트가 요청을 보고 필요한 하위 에이전트에게 task 로 맡깁니다. 유연하지만 gpt-oss 에서는 단계를 건너뛰거나 결과를 덧붙이는 경우가 있어 기본값을 '순서대로' 로 두었습니다.
+- 왼쪽 메뉴: 분류별 에이전트(문서 작업 / 분석 / 쉬어가기), 등록 문서(누르면 선택, 홈에서는 문서 Q&A 로 이동)와 ＋ 올리기, 최근 결과(이 브라우저에 20개까지 저장 — 다시 열어 복사·Markdown·Word 저장), 하단에 사용 중인 모델 상태. PC 에서는 « 로 아이콘만 남게 접을 수 있고(상태 기억), 폭이 좁으면 ☰ 서랍 메뉴가 됩니다.
+- 양식형 에이전트는 결과가 나온 뒤 입력창에 "예산을 부가세 포함으로" 같은 수정 요청을 적으면 전체 문서를 고쳐 다시 씁니다.
+- 결과는 복사, Markdown, Word(.docx)로 저장할 수 있습니다.
+- 15쪽 이하 문서는 요약·보고서·기안을 쓸 때 전문을 페이지 표시와 함께 모델에 넘깁니다. 더 긴 문서는 에이전트가 구성표(`document_outline`)와 검색으로 읽습니다.
+- 에이전트 정의(이름, 양식 필드, 프롬프트)는 [rag/catalog.py](rag/catalog.py) 한 곳에 있습니다. 카드를 추가하려면 `AGENTS` 에 `AgentSpec` 을 하나 더 넣으면 됩니다.
+- 이미지 분석: 끌어다 놓기·파일 고르기·붙여넣기(Ctrl+V)로 올립니다. 기본 모델(gpt-oss)은 이미지를 직접 볼 수 없어서 RapidOCR 로 읽은 글자·배치와 크기·주요 색 정보로 분석합니다. `.env` 에 `VISION_MODEL`(이미지 입력을 받는 모델)을 지정하면 이미지 자체도 함께 보냅니다.
+- 뉴스 기사: 논조는 각 매체의 널리 알려진 성향·문체를 참고하는 수준입니다. 제호·기자 바이라인은 넣지 않고 마지막 줄에 'AI 작성 초안 · ○○ 논조 참고 · 게재 전 사실 확인 필요' 를 붙입니다. 입력에 없는 사실·발언은 [확인 필요]/[인용 필요] 로 둡니다. 논조 목록은 [rag/catalog.py](rag/catalog.py) 의 `_OUTLETS` 에서 고칩니다.
+- 오목: 자유룰(다섯 개 이상이면 승리, 금수 없음). AI 는 LLM 이 아니라 규칙 기반 엔진([rag/omok.py](rag/omok.py))이라 한 수에 0.1초 안쪽입니다. 어려움은 상대 응수까지 한 수 더 내다봅니다. 전적·설정은 브라우저에 저장됩니다.
+- API: `GET /api/agents`, `POST /api/agents/{id}/stream` (SSE), `POST /api/export/docx`, `POST /api/images`, `POST /api/omok/move`, `GET /api/status`, `GET /api/market`, `GET·POST /api/apps`, `GET·PUT·DELETE /api/apps/{id}`
+
+지원 형식:
+
+| 형식 | 확장자 | 처리 방식 |
+|---|---|---|
+| PDF | `.pdf` | 페이지 OCR |
+| Word | `.docx` `.doc` `.rtf` `.odt` | Word로 PDF 변환 → 페이지 OCR |
+| PowerPoint | `.pptx` `.ppt` `.odp` | PowerPoint로 PDF 변환(슬라이드 1장 = 1페이지) → 페이지 OCR |
+| 한글 | `.hwp` `.hwpx` | 한컴오피스로 PDF 변환 → 페이지 OCR |
+| 텍스트 | `.txt` `.md` `.csv` `.tsv` `.log` `.json` | 그대로 읽어 2,500자 안팎 구간으로 나눔 (UTF-8/CP949 자동 판별) |
+
+Word·PowerPoint·한글 변환은 설치된 프로그램을 자동화(COM)해서 별도 프로세스로 실행합니다. 프로그램이 없거나, 한글 보안 확인 창 등으로 3분 안에 끝나지 않으면 파일에서 텍스트를 직접 뽑습니다(`.docx` `.pptx` `.hwpx` `.hwp`). 이때는 문단·표·쪽 나누기(PPT는 슬라이드) 단위의 구간으로 나뉘고 페이지 이미지는 없습니다.
 
 ```
-main agent (진행 담당)
- ├─ parser-agent    : inspect_pdf → extract_text_layer → read_page로 확인
- ├─ ocr-agent       : ocr_pages(Claude 비전) → 품질이 낮으면 dpi=300으로 재시도
- ├─ chunking-agent  : chunk_document → preview_chunks로 확인, 필요하면 크기를 바꿔 다시 청킹
- └─ retrieval-agent : 검색어를 여러 개로 바꿔 search_chunks → 필요하면 get_chunk_context
+[수집 - 코드로 고정 실행: rag/ingest.py]
+ (Word/PowerPoint/한글이면 PDF 변환) → 페이지 → 이미지(200dpi) → RapidOCR(한국어 PP-OCRv5, 로컬)로 글자+좌표 인식
+       → 좌표로 행/칸 복원 → LLM이 마크다운(표/목록/제목)으로 정리
+       → 청킹(페이지·섹션 메타데이터) → BM25 인덱스
+
+[질의응답 - deep agent]
+ main agent : search_chunks(검색어 여러 개) → get_chunk_context / read_page → 출처 붙여 답변
+  └─ retrieval-agent : 질문이 여러 갈래일 때 나눠 맡기는 검색 담당
 ```
 
 정확도를 높이는 방법:
 
-- **페이지별 OCR 판단:** 텍스트 레이어가 거의 없거나 글자가 깨진 페이지만 OCR합니다.
+- **OCR + LLM 정리:** 로컬 OCR이 글자와 위치를 읽고, 텍스트 전용 LLM이 위치 정보를 보고 표와 도식을 복원합니다. PDF에 텍스트 레이어가 있으면 OCR이 놓친 항목을 채우는 참고 자료로 함께 줍니다.
+- **누락 방지:** LLM 정리 결과가 OCR 원문보다 지나치게 짧으면 원문을 그대로 씁니다. 정리 전 원문은 `data/<doc_id>/raw/`에 남습니다.
 - **청크 메타데이터:** 청크마다 페이지 번호와 섹션 제목을 저장해 답에 출처 `(p.N)`를 붙입니다.
 - **검색:** BM25L에 한글 2-gram을 더해, 임베딩 API 없이도 띄어쓰기가 달라진 표현까지 찾습니다.
-- **답변 전 확인:** 숫자와 고유명사가 근거 원문에 실제로 있는지 대조하고, 근거가 없으면 "찾을 수 없음"으로 답합니다.
+- **빈 답변 방지:** 에이전트가 본문 없이 끝나면 찾은 근거로 최종 답변을 한 번 더 요청합니다.
 
 ## 설치
 
@@ -25,16 +67,25 @@ uv sync
 cp .env.example .env   # OPENAI_API_KEY / OPENAI_API_BASE / OPENAI_MODEL 입력
 ```
 
+OCR 모델(약 20MB)은 첫 실행 때 자동으로 내려받습니다.
+
+> Windows에서 `onnxruntime`은 1.20.1로 고정되어 있습니다. 최신 버전은 VC++ 재배포 패키지 14.40 이상이 필요합니다.
+
 ## 실행
 
 ```bash
 uv run web.py                          # 웹 UI: http://127.0.0.1:8000
-uv run main.py 보고서.pdf "질문"        # CLI로 질문 한 번
-uv run main.py 보고서.pdf               # CLI 대화형
+uv run main.py 보고서.hwp "질문"        # CLI로 질문 한 번
+uv run main.py 보고서.docx              # CLI 대화형
 ```
 
-웹 UI에서 PDF를 업로드하고 질문하면, 답변과 함께 호출된 서브에이전트 목록이 표시됩니다.
-처음 질문할 때 문서 수집(파싱, OCR, 청킹)이 자동으로 실행됩니다.
+처음 질문할 때 문서 수집(OCR, 청킹)이 자동으로 실행됩니다. 10쪽 기준 1분 정도 걸리고, 이후에는 저장된 인덱스를 씁니다.
+
+웹 UI는 채팅 화면입니다. 위에서 문서를 고르거나 📎 버튼(또는 화면에 끌어다 놓기)으로 올린 뒤 질문하고, 이어서 질문하면 앞의 대화를 기억합니다(최근 6턴, 서버 메모리). 문서를 바꾸거나 "새 대화"를 누르면 대화가 초기화됩니다. 답변 중에는 ■ 버튼으로 중지할 수 있습니다.
+
+질문하면 처리 과정이 실시간으로 표시됩니다 (`POST /api/ask/stream`, Server-Sent Events, `conversation_id`로 대화 이어가기):
+문서 수집 진행 → 검색어 → 찾은 근거 페이지 → 서브에이전트 위임 → 답변 작성(토큰 스트리밍) → 출처 정리.
+CLI도 같은 단계를 회색 글씨로 출력합니다. 스트리밍 없이 한 번에 받으려면 `POST /api/ask`를 씁니다.
 
 환경변수:
 
@@ -45,12 +96,13 @@ uv run main.py 보고서.pdf               # CLI 대화형
 | `OPENAI_MODEL` | `openai/gpt-oss-120b` | 기본 모델 |
 | `RAG_MODEL` | `OPENAI_MODEL` | 메인 에이전트 모델 |
 | `SUBAGENT_MODEL` | `RAG_MODEL` | 서브에이전트 모델 |
-| `OCR_MODEL` | `RAG_MODEL` | OCR에 쓰는 비전 모델 (이미지 입력 지원 필요) |
+| `OCR_MODEL` | `RAG_MODEL` | OCR 결과를 정리하는 LLM (텍스트 전용이어도 됨) |
+| `OCR_WORKERS` | `4` | 페이지 정리 LLM 동시 호출 수 |
 | `MAX_TOKENS` | `8192` | 응답 최대 토큰 |
-
-모델 이름에 `anthropic:claude-...`처럼 provider 접두어를 붙이면 해당 provider로 생성합니다.
 | `PORT` | `8000` | 웹 서버 포트 |
 | `NO_BROWSER` | (없음) | `1`이면 브라우저를 자동으로 열지 않음 |
+
+모델 이름에 `anthropic:claude-...`처럼 provider 접두어를 붙이면 해당 provider로 생성합니다.
 
 ## 테스트
 
@@ -58,12 +110,17 @@ uv run main.py 보고서.pdf               # CLI 대화형
 uv run pytest
 ```
 
-LLM은 호출하지 않습니다. OCR 모델과 에이전트는 가짜 객체로 바꿔 진단, 추출, 청킹, 검색, 웹 API를 검증합니다.
+LLM과 OCR 엔진은 호출하지 않습니다. 가짜 객체로 바꿔 레이아웃 복원, 수집, 청킹, 검색, 답변 처리, 웹 API를 검증합니다.
 
 ## 구조
 
-- `rag/tools.py`: 단계별 도구
-- `rag/agent.py`: `create_deep_agent`와 서브에이전트 정의
+- `rag/convert.py`: Word/한글 → PDF 변환, 변환 불가 시 텍스트 직접 추출
+- `rag/ocr.py`: 페이지 렌더링, RapidOCR, 레이아웃 복원, LLM 정리
+- `rag/ingest.py`: 수집 파이프라인 (전체 OCR → 청킹)
+- `rag/tools.py`: 단계별 도구 (OCR 재처리, 청킹, 검색)
+- `rag/agent.py`: `create_deep_agent` 정의, 최종 답변·출처 처리
+- `rag/stream.py`: 질문 처리 과정을 단계 이벤트로 스트리밍 (웹 SSE / CLI 공용)
+- `rag/llm.py`: 모델 생성
 - `rag/store.py`: 페이지와 청크를 `data/`에 JSON으로 저장
 - `web.py`, `static/index.html`: FastAPI 웹 UI
 - `main.py`: CLI

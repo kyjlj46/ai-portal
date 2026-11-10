@@ -3,141 +3,1701 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PDF RAG Agent</title>
+<title>업무 에이전트</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗂️</text></svg>">
 <style>
   :root {
     --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #6b7280;
     --line: #e3e6eb; --accent: #2f6fde; --accent-text: #fff; --warn: #b45309;
+    --user: #2f6fde; --user-text: #fff; --soft: #eaf1fd; --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 4px 14px rgb(16 24 40 / 6%);
   }
   @media (prefers-color-scheme: dark) {
+    .board { --wood: #b3874a; --grid: #2e1f0d; }
+    .ostatus.win { background: #173b24; color: #9ee6b5; } .ostatus.lose { background: #4a1d1d; color: #ffb4b4; }
     :root { --bg: #14171c; --card: #1d2128; --text: #e6e8ec; --muted: #9aa1ad;
-            --line: #2d323b; --accent: #5b8ff0; --accent-text: #0d1117; --warn: #f0b35b; }
+            --line: #2d323b; --accent: #5b8ff0; --accent-text: #0d1117; --warn: #f0b35b;
+            --user: #2b4f91; --user-text: #eef3ff; --soft: #1f2b40; --shadow: 0 1px 2px rgb(0 0 0 / 30%); }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); display: flex;
          font: 15px/1.6 system-ui, "Malgun Gothic", sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 20px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-          padding: 16px; margin-bottom: 16px; }
-  .card h2 { font-size: 15px; margin: 0 0 12px; }
-  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 24px; text-align: center;
-          color: var(--muted); cursor: pointer; }
-  .drop.over { border-color: var(--accent); color: var(--accent); }
-  select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg);
-                     border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
-  textarea { resize: vertical; min-height: 70px; margin-top: 10px; }
-  button { font: inherit; background: var(--accent); color: var(--accent-text); border: 0;
-           border-radius: 6px; padding: 8px 18px; margin-top: 10px; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: wait; }
-  .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
-  .answer { white-space: pre-wrap; }
-  .steps { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
-  .steps b { color: var(--text); }
+  [hidden] { display: none !important; }
+  .mainwrap { flex: 1; min-width: 0; height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+
+  /* 왼쪽 메뉴 */
+  .side { flex: none; width: 252px; height: 100vh; height: 100dvh; display: flex; flex-direction: column; gap: 4px;
+          background: var(--card); border-right: 1px solid var(--line); overflow: hidden; transition: width .18s ease; }
+  .side-top { display: flex; align-items: center; gap: 6px; padding: 12px 10px 8px 14px; }
+  .side .brand { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 16px; }
+  .iconbtn { flex: none; width: 32px; height: 32px; display: grid; place-items: center; font: inherit; font-size: 16px;
+             color: var(--muted); background: none; border: 1px solid transparent; border-radius: 8px; cursor: pointer; }
+  .iconbtn:hover, .iconbtn:focus-visible { border-color: var(--line); color: var(--text); outline: none; }
+  .side-scroll { flex: 1; overflow-y: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 14px; }
+  .nav-group { display: flex; flex-direction: column; gap: 2px; }
+  .side-h { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 8px 2px;
+            font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+  .side-h button { font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 0 2px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; color: var(--text);
+              text-decoration: none; font-size: 14px; white-space: nowrap; }
+  .nav-item:hover, .nav-item:focus-visible { background: var(--bg); outline: none; }
+  .nav-item.on { background: var(--soft); color: var(--accent); font-weight: 700; }
+  .nav-item .ni { width: 22px; text-align: center; flex: none; }
+  .nav-item .lbl { overflow: hidden; text-overflow: ellipsis; }
+  .side-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .side-list button { width: 100%; text-align: left; font: inherit; font-size: 13px; color: var(--text); background: none; border: 0;
+                      border-radius: 8px; padding: 6px 8px; cursor: pointer; display: flex; flex-direction: column; min-width: 0; }
+  .side-list button:hover, .side-list button:focus-visible { background: var(--bg); outline: none; }
+  .side-list button.on { background: var(--soft); }
+  .side-list .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side-list .m { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side-list .none { font-size: 12px; color: var(--muted); padding: 4px 8px; }
+  .side-foot { flex: none; border-top: 1px solid var(--line); padding: 8px 14px 10px; font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .side-foot .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; background: #2e9d57; vertical-align: 1px; }
+  .side-foot .dot.off { background: var(--warn); }
+  /* 접힌 상태 (PC): 아이콘만 */
+  body.collapsed .side { width: 60px; }
+  body.collapsed .side .lbl, body.collapsed .side .side-sec, body.collapsed .side .side-h,
+  body.collapsed .side-foot .txt { display: none; }
+  body.collapsed .side-top { flex-direction: column; padding: 12px 6px 8px; }
+  body.collapsed .nav-item { justify-content: center; padding: 8px 0; }
+  body.collapsed .side-foot { padding: 8px 0; text-align: center; }
+  #menuBtn { display: none; }
+  .scrim { position: fixed; inset: 0; background: rgb(0 0 0 / 35%); z-index: 19; }
+  @media (max-width: 900px) {
+    .side { position: fixed; left: 0; top: 0; z-index: 20; width: 272px; transform: translateX(-100%); transition: transform .2s ease;
+            box-shadow: 0 0 24px rgb(0 0 0 / 20%); }
+    body.menu-open .side { transform: none; }
+    body.collapsed .side { width: 272px; }
+    body.collapsed .side .lbl, body.collapsed .side .side-h, body.collapsed .side-foot .txt { display: revert; }
+    body.collapsed .side .side-sec { display: block; }
+    #collapse { display: none; }
+    #menuBtn { display: grid; }
+  }
+  @media (prefers-reduced-motion: reduce) { .side, .market { transition: none; } }
+
+  /* 오른쪽: Agent 마켓 */
+  .market { flex: none; width: 330px; height: 100vh; height: 100dvh; display: none; flex-direction: column;
+            background: var(--card); border-left: 1px solid var(--line); }
+  body.market-open .market { display: flex; }
+  .mk-top { display: flex; align-items: center; gap: 8px; padding: 12px 12px 4px 16px; }
+  .mk-top h2 { flex: 1; margin: 0; font-size: 16px; }
+  .mk-sub { margin: 0 16px 8px; font-size: 12px; color: var(--muted); }
+  .mk-search { margin: 0 12px 8px; font: inherit; font-size: 14px; color: var(--text); background: var(--bg);
+               border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+  .mk-search:focus { outline: none; border-color: var(--accent); }
+  .mk-cats { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; }
+  .mk-cats button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+                    border-radius: 12px; padding: 2px 10px; cursor: pointer; }
+  .mk-cats button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .mk-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .mk-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--card); cursor: grab; }
+  .mk-card:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .mk-card.dragging { opacity: .5; }
+  .mk-card .row { display: flex; align-items: center; gap: 8px; }
+  .mk-card .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--soft); display: grid; place-items: center; font-size: 17px; flex: none; }
+  .mk-card .nm { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
+  .mk-card .badge { font-size: 10px; font-weight: 700; color: #fff; background: #e0464b; border-radius: 6px; padding: 0 5px; margin-left: 4px; vertical-align: 1px; }
+  .mk-card .cat { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; flex: none; }
+  .mk-card p { margin: 6px 0 8px; font-size: 12.5px; color: var(--muted); line-height: 1.5;
+               display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .mk-card .acts { display: flex; gap: 6px; }
+  .mk-card .acts .btn { font-size: 12px; padding: 3px 10px; }
+  .mk-card .acts .btn.added { color: var(--muted); }
+  .mk-empty { color: var(--muted); font-size: 13px; padding: 12px 4px; }
+  .mk-foot { flex: none; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+  .mk-foot .btn { width: 100%; }
+  #marketBtn.on { border-color: var(--accent); color: var(--accent); }
+  @media (max-width: 1279px) {
+    .market { display: flex; position: fixed; right: 0; top: 0; z-index: 20; width: 340px; max-width: 92vw;
+              transform: translateX(100%); transition: transform .2s ease; box-shadow: 0 0 24px rgb(0 0 0 / 20%); visibility: hidden; }
+    body.market-open .market { transform: none; visibility: visible; }
+  }
+  @media (max-width: 640px) { #marketBtn .lbl { display: none; } }
+
+  /* 커스텀 앱 빌더 */
+  #builder { flex: 1; overflow-y: auto; }
+  .builder { max-width: 1060px; margin: 0 auto; padding: 24px 16px 40px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
+  .bcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); display: grid; gap: 12px; }
+  .bcard h2 { margin: 0; font-size: 18px; } .bcard h3 { margin: 0; font-size: 15px; display: flex; justify-content: space-between; align-items: baseline; }
+  .bcard h3 small { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .bcard .intro { margin: -4px 0 0; color: var(--muted); font-size: 13px; }
+  .namerow { display: grid; grid-template-columns: 76px 1fr; gap: 10px; }
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .flow span { border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; background: var(--bg); color: var(--text); white-space: nowrap; }
+  .team { list-style: none; margin: 0; padding: 10px; min-height: 150px; border: 2px dashed var(--line); border-radius: 12px;
+          display: flex; flex-direction: column; gap: 8px; transition: border-color .12s, background .12s; }
+  .team.over { border-color: var(--accent); background: var(--soft); }
+  .team .ph { margin: auto; text-align: center; color: var(--muted); font-size: 13px; padding: 18px 8px; }
+  .team .ph b { display: block; font-size: 26px; margin-bottom: 4px; }
+  .member { display: grid; grid-template-columns: 24px 32px minmax(0, 1fr) auto; gap: 8px; align-items: center; background: var(--card);
+            border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 10px; }
+  .member.new { animation: fadein .2s ease; }
+  .member .no { font-weight: 700; color: var(--accent); text-align: center; }
+  .member .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--soft); display: grid; place-items: center; font-size: 17px; }
+  .member .tx { min-width: 0; } .member .tx b { display: block; font-size: 14px; }
+  .member .tx span { display: block; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .member .mv { display: flex; gap: 2px; } .member .mv .iconbtn { width: 28px; height: 28px; font-size: 13px; }
+  .tpls { display: flex; flex-wrap: wrap; gap: 6px; }
+  .bactions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+  .bactions .ferr { margin-right: auto; }
+  .bactions .danger { color: var(--warn); }
+  .teamchips { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin-top: 12px; font-size: 13px; }
+  .teamchips span.m { border: 1px solid var(--line); border-radius: 12px; padding: 2px 10px; background: var(--card); color: var(--text); }
+  .acard.create { border-style: dashed; align-items: center; justify-content: center; text-align: center; color: var(--muted); }
+  .acard.create .ico { background: none; font-size: 28px; }
+  @media (max-width: 860px) { .builder { grid-template-columns: 1fr; } }
+
+  /* 상단 바 */
+  .top { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px;
+         background: var(--card); border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 700; margin-right: 2px; color: var(--text); text-decoration: none; white-space: nowrap; }
+  .crumb { display: flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+  .crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .spacer { flex: 1 1 0; }
+  .top select { flex: 0 1 300px; min-width: 0; font: inherit; color: var(--text); background: var(--bg);
+                border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  .btn { font: inherit; font-size: 14px; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: default; border-color: var(--line); }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  .btn.primary:disabled { opacity: .5; cursor: default; }
+  .docinfo { flex-basis: 100%; color: var(--muted); font-size: 12px; min-height: 0; }
+  .docinfo:empty { display: none; }
+
+  /* 홈: 에이전트 카드 */
+  #home { flex: 1; overflow-y: auto; padding: 40px 16px; }
+  .home { max-width: 980px; margin: 0 auto; }
+  .home h1 { font-size: 26px; margin: 0 0 4px; }
+  .home .lead { color: var(--muted); margin: 0 0 28px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .acard { text-align: left; font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line);
+           border-radius: 14px; padding: 18px; cursor: pointer; display: flex; flex-direction: column; gap: 8px;
+           box-shadow: var(--shadow); transition: transform .12s ease, border-color .12s ease; }
+  .acard:hover, .acard:focus-visible { border-color: var(--accent); transform: translateY(-2px); outline: none; }
+  .acard .ico { width: 44px; height: 44px; border-radius: 12px; background: var(--soft); display: grid; place-items: center; font-size: 22px; }
+  .acard h3 { margin: 4px 0 0; font-size: 17px; }
+  .acard p { margin: 0; color: var(--muted); font-size: 13.5px; flex: 1; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .tag { font-size: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; color: var(--muted); }
+  .tag.req { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .hgroup + .hgroup { margin-top: 28px; }
+  .hgroup h2 { font-size: 14px; color: var(--muted); margin: 0 0 10px; font-weight: 700; }
+
+  /* 대화 영역 */
+  #chat { flex: 1; overflow-y: auto; padding: 20px 16px 8px; }
+  .thread { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+  .empty { text-align: center; color: var(--muted); padding: 48px 8px; }
+  .empty h2 { color: var(--text); font-size: 20px; margin: 0 0 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+  .chip { font: inherit; font-size: 13px; background: var(--card); color: var(--text); border: 1px solid var(--line);
+          border-radius: 16px; padding: 5px 12px; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); }
+
+  /* 양식 */
+  .formcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; box-shadow: var(--shadow); }
+  .formcard .fhead { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .formcard .fhead .ico { width: 40px; height: 40px; border-radius: 10px; background: var(--soft); display: grid; place-items: center; font-size: 20px; flex: none; }
+  .formcard h2 { font-size: 18px; margin: 0; }
+  .formcard .intro { color: var(--muted); font-size: 14px; margin: 6px 0 12px; }
+  .docline { font-size: 13px; padding: 6px 10px; border-radius: 8px; background: var(--bg); margin-bottom: 14px; }
+  .docline.warn { color: var(--warn); }
+  .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field.wide { grid-column: 1 / -1; }
+  .field label { font-size: 13px; font-weight: 600; }
+  .field label .req { color: var(--warn); margin-left: 2px; }
+  .field input, .field select, .field textarea { font: inherit; font-size: 14px; color: var(--text); background: var(--bg);
+       border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; width: 100%; }
+  .field textarea { resize: vertical; min-height: 72px; }
+  .fhelp { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
+  .factions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 16px; }
+  .factions .ferr { color: var(--warn); font-size: 13px; margin-right: auto; }
+
+  .msg.user { align-self: flex-end; max-width: 80%; background: var(--user); color: var(--user-text);
+              padding: 8px 14px; border-radius: 16px 16px 4px 16px; white-space: pre-wrap; word-break: break-word; }
+  .msg.bot { align-self: stretch; background: var(--card); border: 1px solid var(--line); border-radius: 4px 16px 16px 16px;
+             padding: 12px 16px; min-width: 0; }
+  .msg.note { align-self: center; color: var(--muted); font-size: 13px; background: var(--card);
+              border: 1px dashed var(--line); border-radius: 12px; padding: 4px 12px; }
+
+  /* 진행 과정 */
+  .progress { margin-bottom: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); }
+  .progress summary { cursor: pointer; font-size: 13px; color: var(--muted); list-style: none; }
+  .progress summary::-webkit-details-marker { display: none; }
+  .progress summary::before { content: "▸ "; }
+  .progress[open] summary::before { content: "▾ "; }
+  .trace { list-style: none; margin: 6px 0 2px; padding: 0; font-size: 13px; }
+  .trace li { display: flex; gap: 8px; padding: 2px 0; color: var(--muted); animation: fadein .25s ease; }
+  .trace li .ic { width: 18px; text-align: center; flex: none; }
+  .trace li.sub { padding-left: 22px; }
+  .trace li.k-result { padding-left: 26px; font-size: 12px; }
+  .trace li.sub.k-result { padding-left: 48px; }
+  .trace li.active { color: var(--text); }
+  .trace li.active .ic { animation: pulse 1s ease-in-out infinite; }
+  .trace .time { margin-left: auto; font-variant-numeric: tabular-nums; opacity: .7; flex: none; }
+
+  /* 답변 */
+  .answer { overflow-wrap: anywhere; }
+  .answer.plain { white-space: pre-wrap; }
+  .answer > :first-child { margin-top: 0; }
+  .answer > :last-child { margin-bottom: 0; }
+  .answer h1 { font-size: 20px; margin: 4px 0 10px; text-align: center; }
+  .answer h2, .answer h3 { font-size: 16px; margin: 14px 0 6px; }
+  .answer table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0; display: block; overflow-x: auto; }
+  .answer th, .answer td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+  .answer th { background: var(--bg); }
+  .answer blockquote { margin: 8px 0; padding-left: 10px; border-left: 3px solid var(--line); color: var(--muted); }
+  .doc-out { border-top: 1px solid var(--line); padding-top: 12px; }
+  .cursor::after { content: "▍"; animation: blink 1s steps(1) infinite; color: var(--accent); }
   .err { color: var(--warn); white-space: pre-wrap; }
+  .cite { display: inline-block; font-size: 12px; line-height: 1.5; padding: 0 6px; margin: 0 1px;
+          border-radius: 9px; background: var(--accent); color: var(--accent-text); cursor: pointer;
+          text-decoration: none; white-space: nowrap; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+  .tools .btn { font-size: 13px; padding: 4px 10px; }
+
+  /* 출처 */
+  .srcbox { margin-top: 12px; }
+  .srcbox summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+  .srcnote { color: var(--muted); font-size: 12px; margin: 4px 0 8px; }
+  .sources { display: grid; gap: 8px; }
+  .src { display: grid; grid-template-columns: 120px 1fr; gap: 12px; border: 1px solid var(--line);
+         border-radius: 8px; padding: 8px; scroll-margin: 16px; }
+  .src.noimg { grid-template-columns: 1fr; }
+  .src.flash { outline: 2px solid var(--accent); }
+  .src img { width: 120px; border: 1px solid var(--line); border-radius: 4px; cursor: zoom-in; background: #fff; display: block; }
+  .src .head { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+  .src .head span { color: var(--muted); font-weight: 400; }
+  .src .snip { font-size: 13px; color: var(--muted); white-space: pre-wrap; max-height: 8em; overflow: auto; }
+
+  /* 입력창 */
+  .composer { flex: none; padding: 10px 16px 14px; background: linear-gradient(transparent, var(--bg) 30%); }
+  .inputbox { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; background: var(--card);
+              border: 1px solid var(--line); border-radius: 14px; padding: 8px 8px 8px 14px; }
+  .inputbox:focus-within { border-color: var(--accent); }
+  #q { flex: 1; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit;
+       max-height: 200px; padding: 4px 0; }
+  #send { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--accent);
+          color: var(--accent-text); font-size: 18px; cursor: pointer; }
+  #send:disabled { opacity: .4; cursor: default; }
+  #send.stop { font-size: 13px; }
+  .hint { max-width: 860px; margin: 4px auto 0; color: var(--muted); font-size: 12px; text-align: center; }
+
+  .dropzone { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 10;
+              background: color-mix(in srgb, var(--accent) 18%, transparent); border: 3px dashed var(--accent);
+              font-size: 20px; font-weight: 600; color: var(--text); }
+  .dropzone.on { display: flex; }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line);
              border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;
              vertical-align: -2px; margin-right: 6px; }
+  /* 이미지 분석 */
+  .imgpick { display: flex; align-items: center; gap: 14px; border: 2px dashed var(--line); border-radius: 12px; padding: 14px;
+             margin-bottom: 14px; cursor: pointer; background: var(--bg); min-height: 96px; }
+  .imgpick:hover, .imgpick:focus-visible { border-color: var(--accent); outline: none; }
+  .imgpick img { max-width: 160px; max-height: 120px; border-radius: 6px; border: 1px solid var(--line); background: #fff; flex: none; }
+  .imgpick .big { font-size: 30px; flex: none; }
+  .imgpick .meta { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+  .imgpick .meta b { display: block; }
+  .imgpick .meta span { color: var(--muted); font-size: 13px; }
+  .msg.user img { display: block; max-width: 220px; max-height: 180px; border-radius: 8px; margin-bottom: 6px; background: #fff; }
+
+  /* 오목 */
+  #game { flex: 1; overflow-y: auto; }
+  .omok { max-width: 1000px; margin: 0 auto; padding: 24px 16px; display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .omok-side { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); display: grid; gap: 14px; }
+  .omok-side h2 { margin: 0; font-size: 18px; }
+  .omok-side p { margin: 0; color: var(--muted); font-size: 13px; }
+  .omok-side .lbl { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; font: inherit; font-size: 13px; padding: 6px 4px; border: 0; background: var(--bg); color: var(--text); cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .ostatus { font-weight: 600; padding: 8px 10px; border-radius: 8px; background: var(--soft); text-align: center; }
+  .ostatus.win { background: #dcf3e3; color: #13652f; } .ostatus.lose { background: #fde4e4; color: #9b1c1c; }
+  .orow { display: flex; gap: 8px; } .orow .btn { flex: 1; }
+  .ostats { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+  .ostats button { font: inherit; font-size: 12px; background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; }
+  .boardwrap { display: flex; justify-content: center; }
+  .board { --wood: #e2b56f; --grid: #5a3f1f; width: min(620px, calc(100vw - 32px)); aspect-ratio: 1; display: grid;
+           grid-template-columns: repeat(15, 1fr); grid-template-rows: repeat(15, 1fr); padding: 2.5%; border-radius: 10px;
+           background: var(--wood); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 15%), var(--shadow); }
+  .pt { position: relative; border: 0; padding: 0; background: none; cursor: pointer; }
+  .pt:disabled { cursor: default; }
+  .pt::before, .pt::after { content: ""; position: absolute; background: var(--grid); pointer-events: none; }
+  .pt::before { top: 50%; left: 0; right: 0; height: 1px; }
+  .pt::after { left: 50%; top: 0; bottom: 0; width: 1px; }
+  .pt.L::before { left: 50%; } .pt.R::before { right: 50%; } .pt.T::after { top: 50%; } .pt.B::after { bottom: 50%; }
+  .pt .hoshi { position: absolute; left: 50%; top: 50%; width: 18%; height: 18%; transform: translate(-50%, -50%); border-radius: 50%; background: var(--grid); }
+  .pt .stone, .pt .ghost { position: absolute; inset: 7%; border-radius: 50%; z-index: 1; }
+  .stone.b { background: radial-gradient(circle at 35% 30%, #6b6b6b, #121212 62%); box-shadow: 1px 2px 3px rgb(0 0 0 / 45%); }
+  .stone.w { background: radial-gradient(circle at 35% 30%, #fff, #dcdcdc 72%); box-shadow: 1px 2px 3px rgb(0 0 0 / 35%), inset 0 0 0 1px #b9b9b9; }
+  .stone.last::after { content: ""; position: absolute; left: 50%; top: 50%; width: 28%; height: 28%; transform: translate(-50%, -50%); border-radius: 50%; background: #e0464b; }
+  .stone.win { box-shadow: 0 0 0 3px #e0464b, 0 0 12px 2px rgb(224 70 75 / 60%); }
+  .ghost { opacity: 0; pointer-events: none; }
+  .board.myturn .pt:not(.taken):hover .ghost { opacity: .45; }
+  .board.human-b .ghost { background: #111; } .board.human-w .ghost { background: #fff; }
+  @media (max-width: 760px) { .omok { grid-template-columns: 1fr; } .boardwrap { order: -1; } }
+
   @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 50% { opacity: .3; } }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes fadein { from { opacity: 0; transform: translateY(-2px); } }
+  @media (max-width: 640px) {
+    .msg.user { max-width: 92%; }
+    .src { grid-template-columns: 1fr; } .src img { width: 100%; }
+    .fields { grid-template-columns: 1fr; }
+    .top select { flex-basis: 100%; order: 5; }
+    #home { padding: 24px 16px; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <h1>PDF RAG Agent</h1>
-  <p class="sub">PDF를 올리고 질문하면 파싱 → OCR → 청킹 → 검색 서브에이전트가 순서대로 처리합니다.</p>
+<aside class="side" id="side" aria-label="메뉴">
+  <div class="side-top">
+    <a class="brand" href="#/" title="홈">🗂️ <span class="lbl">업무 에이전트</span></a>
+    <button class="iconbtn" id="collapse" title="메뉴 접기" aria-label="메뉴 접기" aria-expanded="true">«</button>
+    <button class="iconbtn" id="closeMenu" title="메뉴 닫기" aria-label="메뉴 닫기" hidden>✕</button>
+  </div>
+  <div class="side-scroll">
+    <nav class="nav-group" id="nav" aria-label="에이전트"></nav>
+    <section class="side-sec" aria-labelledby="docsH">
+      <div class="side-h"><span id="docsH">문서</span><button id="sideUpload" title="PDF · Word · PowerPoint · 한글 · 텍스트">＋ 올리기</button></div>
+      <ul class="side-list" id="sideDocs"></ul>
+    </section>
+    <section class="side-sec" aria-labelledby="recentH">
+      <div class="side-h"><span id="recentH">최근 결과</span><button id="clearRecent" title="이 브라우저에 저장된 최근 결과 지우기">지우기</button></div>
+      <ul class="side-list" id="recent"></ul>
+    </section>
+  </div>
+  <div class="side-foot" id="status" aria-live="polite"></div>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
 
-  <section class="card">
-    <h2>1. PDF 업로드</h2>
-    <label class="drop" id="drop">
-      PDF 파일을 끌어다 놓거나 클릭해서 선택
-      <input type="file" id="file" accept="application/pdf" hidden>
-    </label>
-    <div class="meta" id="uploadMsg"></div>
-  </section>
+<div class="mainwrap">
+<header class="top">
+  <button class="iconbtn" id="menuBtn" title="메뉴" aria-label="메뉴 열기" aria-controls="side" aria-expanded="false">☰</button>
+  <span class="crumb" id="crumb"></span>
+  <span class="spacer"></span>
+  <select id="doc" aria-label="문서 선택" hidden><option value="">문서를 선택하세요</option></select>
+  <button class="btn" id="attach" title="PDF · Word · PowerPoint · 한글 · 텍스트">📎 문서 올리기</button>
+  <button class="btn" id="newChat" hidden>＋ 새로 시작</button>
+  <button class="btn" id="marketBtn" aria-controls="marketPanel" aria-expanded="false" title="Agent 마켓 열기/닫기">🧩 <span class="lbl">Agent 마켓</span></button>
+  <input type="file" id="file" accept=".pdf,.docx,.doc,.rtf,.odt,.pptx,.ppt,.odp,.hwp,.hwpx,.txt,.md,.markdown,.csv,.tsv,.log,.json" hidden>
+  <div class="docinfo" id="docInfo"></div>
+</header>
 
-  <section class="card">
-    <h2>2. 질문</h2>
-    <select id="doc"><option value="">문서를 선택하세요</option></select>
-    <div class="meta" id="docInfo"></div>
-    <textarea id="q" placeholder="예: 이 문서에서 연구 인력은 몇 명이야?"></textarea>
-    <button id="ask">질문하기</button>
-  </section>
-
-  <section class="card" id="resultCard" hidden>
-    <h2>답변</h2>
-    <div id="result" class="answer"></div>
-    <h2 style="margin-top:16px">처리 단계</h2>
-    <ol class="steps" id="steps"></ol>
-  </section>
+<main id="home">
+  <div class="home">
+    <h1>무엇을 도와드릴까요?</h1>
+    <p class="lead">문서를 근거로 묻고, 요약하고, 보고서·기안문·기사를 쓰고, 이미지를 분석합니다. 오른쪽 🧩 Agent 마켓의 Agent 를 끌어다 나만의 앱도 만들 수 있어요.</p>
+    <div id="cards"></div>
+  </div>
 </main>
 
+<div id="chat" hidden><div class="thread" id="thread"></div></div>
+
+<main id="game" hidden></main>
+<main id="builder" hidden></main>
+<input type="file" id="imgFile" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif,image/tiff" hidden>
+
+<footer class="composer" id="composer" hidden>
+  <div class="inputbox">
+    <textarea id="q" rows="1" placeholder="문서에 대해 질문하세요"></textarea>
+    <button id="send" title="보내기 (Enter)">↑</button>
+  </div>
+  <div class="hint" id="hint">Enter 보내기 · Shift+Enter 줄바꿈 · 이어서 질문하면 앞의 대화를 기억합니다</div>
+</footer>
+</div>
+
+<aside class="market" id="marketPanel" aria-label="Agent 마켓">
+  <div class="mk-top">
+    <h2>🧩 Agent 마켓</h2>
+    <button class="iconbtn" id="marketClose" title="마켓 닫기" aria-label="마켓 닫기">✕</button>
+  </div>
+  <p class="mk-sub">바로 <b>사용</b>하거나, 끌어다 놓거나 <b>＋ 담기</b>로 나만의 앱을 만드세요.</p>
+  <input class="mk-search" id="mkSearch" type="search" placeholder="Agent 검색 (예: 번역, 메일)" aria-label="Agent 검색">
+  <div class="mk-cats" id="mkCats" role="group" aria-label="분류"></div>
+  <ul class="mk-list" id="mkList"></ul>
+  <div class="mk-foot"><button class="btn primary" id="mkBuild">＋ 커스텀 앱 만들기</button></div>
+</aside>
+
+<div class="dropzone" id="dropzone">여기에 놓으면 업로드합니다</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
+const KIND = { pdf: "PDF", word: "Word", ppt: "PowerPoint", hwp: "한글", text: "텍스트" };
+const ICON = { ingest: "📄", think: "🧠", search: "🔎", read: "📖", delegate: "🤝", result: "↳", answer: "✍️" };
+const SUBMIT = { summary: "요약하기", report: "보고서 작성", approval: "기안문 작성", news: "기사 작성", image: "분석하기" };
+let agents = [];          // /api/agents
+let agent = null;         // 지금 열린 에이전트
 let docs = [];
+let convId = newId();
+let busy = false, controller = null;
+let produced = false;     // 양식형 에이전트가 결과를 한 번 이상 냈는지 (이후 입력은 수정 요청)
+const formValues = {};    // 에이전트별 양식 입력 (새로 시작해도 유지)
 
+function newId() {
+  return (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+// ── 스크롤: 사용자가 맨 아래를 보고 있을 때만 따라 내려간다 ──
+const chat = $("chat");
+let stick = true;
+chat.addEventListener("scroll", () => { stick = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80; });
+function follow() { if (stick) chat.scrollTop = chat.scrollHeight; }
+
+// ── 에이전트 목록: 기본 카드 + 내 앱(app:<id>) + 마켓 단독 실행(m:<id>) ──
+let market = [], marketCats = [], apps = [];
+function appAgent(a) {
+  return { id: `app:${a.id}`, appId: a.id, name: a.name, icon: a.icon, description: a.description || `Agent ${a.agents.length}개로 만든 앱`,
+           doc: a.doc, mode: "chat", group: "내 앱", intro: a.description, examples: a.examples, team: a.agents, fields: [],
+           run: a.run || "pipeline" };
+}
+function marketAgent(m) {
+  return { id: `m:${m.id}`, name: m.name, icon: m.icon, description: m.description, doc: m.uses_doc ? "optional" : "none",
+           mode: "chat", group: "마켓", intro: m.description, examples: m.examples, fields: [] };
+}
+function navAgents() { return [...agents, ...apps.map(appAgent)]; }
+function allAgents() { return [...navAgents(), ...market.filter(m => !m.route).map(marketAgent)]; }
+function findAgent(id) { return allAgents().find(a => a.id === id) || null; }
+async function loadApps() { try { apps = await (await fetch("/api/apps")).json(); } catch { apps = []; } }
+
+// ── 화면 전환: #/ 홈, #/<에이전트 id>, #/r/<id> 최근 결과, #/build[/<앱 id>] 앱 빌더 ──
+function route() {
+  const id = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
+  const recentId = id.startsWith("r/") ? id.slice(2) : null;
+  const build = id === "build" || id.startsWith("build/") ? { appId: id.slice(6) || null } : null;
+  const next = recentId || build ? null : findAgent(id);
+  const leaving = next !== agent || recentId || build;
+  if (busy && controller && leaving) controller.abort();
+  if (leaving) { $("q").value = ""; autosize(); image = null; }  // 다른 화면으로 가면 쓰던 입력·이미지를 비운다
+  agent = next;
+  const mode = agent?.mode, usesDoc = !!agent && agent.doc !== "none";
+  $("home").hidden = !!agent || !!recentId || !!build;
+  $("chat").hidden = (!agent && !recentId) || mode === "game";
+  $("composer").hidden = !agent || mode === "game";
+  $("game").hidden = mode !== "game";
+  $("builder").hidden = !build;
+  $("doc").hidden = $("docInfo").hidden = !usesDoc;
+  $("attach").hidden = !!recentId || !!build || (!!agent && !usesDoc);
+  $("newChat").hidden = !agent || mode === "game";
+  closeMenu();
+  if (!build) closeMarketDrawer();
+  renderNav(recentId ? null : build ? (build.appId ? `app:${build.appId}` : "build") : (agent?.id || "home"));
+  renderRecent(recentId);
+  renderMarket();
+  if (recentId) return showRecent(recentId);
+  if (build) return showBuilder(build.appId);
+  document.title = agent ? `${agent.name} · 업무 에이전트` : "업무 에이전트";
+  $("crumb").textContent = agent ? `${agent.icon} ${agent.name}` : "🏠 홈";
+  if (!agent) { renderHome(); return; }
+  if (mode === "game") { renderOmok(); return; }
+  newChat(true);
+  $("q").focus();
+}
+addEventListener("hashchange", route);
+
+const TAGS = {
+  doc: (a) => ({ required: "문서 필요", optional: "참고 문서 선택", none: a.mode === "image" ? "이미지 업로드" : "바로 시작" }[a.doc]),
+  mode: (a) => ({ chat: "채팅", form: "양식 작성 → 수정 요청", image: "분석 → 이어서 질문", game: "미니게임 · AI 대전" }[a.mode]),
+};
+function groups() {
+  const out = new Map();
+  for (const a of navAgents()) { if (!out.has(a.group)) out.set(a.group, []); out.get(a.group).push(a); }
+  if (!out.has("내 앱")) out.set("내 앱", []);  // 앱이 없어도 '새 앱 만들기' 자리는 보인다
+  return out;
+}
+
+function renderHome() {
+  const box = $("cards");
+  box.replaceChildren();
+  for (const [name, list] of groups()) {
+    const sec = el("section", "hgroup");
+    const grid = el("div", "cards");
+    for (const a of list) {
+      const c = el("button", "acard");
+      c.onclick = () => { location.hash = `#/${a.id}`; };
+      const tags = el("div", "tags");
+      if (a.team) {
+        tags.append(el("span", "tag req", `Agent ${a.team.length}개 팀`), el("span", "tag", TAGS.doc(a)));
+      } else {
+        tags.append(el("span", "tag" + (a.doc === "required" ? " req" : ""), TAGS.doc(a)), el("span", "tag", TAGS.mode(a)));
+      }
+      c.append(el("div", "ico", a.icon), el("h3", null, a.name), el("p", null, a.description), tags);
+      grid.append(c);
+    }
+    if (name === "내 앱") {
+      const c = el("button", "acard create");
+      c.onclick = () => { location.hash = "#/build"; };
+      c.append(el("div", "ico", "＋"), el("h3", null, "새 앱 만들기"),
+               el("p", null, "Agent 마켓의 Agent 를 끌어다 놓아 나만의 DeepAgent 앱을 만듭니다."));
+      grid.append(c);
+    }
+    sec.append(el("h2", null, name), grid);
+    box.append(sec);
+  }
+}
+
+// ── 왼쪽 메뉴 ──
+function renderNav(activeId) {
+  const nav = $("nav");
+  nav.replaceChildren();
+  const item = (href, icon, label, on) => {
+    const a = el("a", "nav-item" + (on ? " on" : ""));
+    a.href = href; a.title = label;
+    if (on) a.setAttribute("aria-current", "page");
+    a.append(el("span", "ni", icon), el("span", "lbl", label));
+    return a;
+  };
+  nav.append(item("#/", "🏠", "홈", activeId === "home"));
+  for (const [name, list] of groups()) {
+    const h = el("div", "side-h"); h.append(el("span", null, name));
+    nav.append(h);
+    for (const a of list) nav.append(item(`#/${a.id}`, a.icon, a.name, a.id === activeId));
+    if (name === "내 앱") nav.append(item("#/build", "＋", "새 앱 만들기", activeId === "build"));
+  }
+}
+
+function renderSideDocs() {
+  const ul = $("sideDocs");
+  ul.replaceChildren();
+  const real = docs.filter(d => !d.pending);
+  if (!real.length) { ul.append(el("li", "none", "아직 없습니다. ＋ 올리기로 추가하세요.")); return; }
+  const current = $("doc").value;
+  for (const d of real) {
+    const li = el("li");
+    const b = el("button", d.path === current ? "on" : "");
+    b.title = `${d.filename} — 이 문서 선택`;
+    if (d.path === current) b.setAttribute("aria-current", "true");
+    b.append(el("span", "t", `📄 ${d.filename}`), el("span", "m", docSummary(d)));
+    b.onclick = () => pickDoc(d.path);
+    li.append(b);
+    ul.append(li);
+  }
+}
+
+// 메뉴에서 문서를 고르면: 문서를 쓰는 화면이면 그 문서로 바꾸고, 아니면 문서 Q&A 로 연다
+function pickDoc(path) {
+  const sel = $("doc");
+  if (![...sel.options].some(o => o.value === path)) sel.add(new Option(path.split(/[\\/]/).pop(), path));
+  sel.value = path;
+  if (agent && agent.doc !== "none") { sel.onchange(); renderSideDocs(); closeMenu(); }
+  else location.hash = "#/qa";
+}
+
+// 최근 결과: 이 브라우저에만 저장 (서버에 남지 않음). 다른 화면으로 가도 다시 열어 복사·저장할 수 있게
+const RECENT_KEY = "recent-results", RECENT_MAX = 20;
+function loadRecent() { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch { return []; } }
+function saveRecent(entry) {
+  const list = [entry, ...loadRecent()].slice(0, RECENT_MAX);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); }
+  catch { try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 5))); } catch { /* 저장 공간 없음 */ } }
+  renderRecent();
+}
+// 제목: 결과의 '# 제목' → (채팅이면) 질문 → '에이전트 · 문서/이미지 이름'
+function recentTitle(a, markdown, userText, subject) {
+  const h = markdown.match(/^#\s+(.+)$/m)?.[1];
+  const t = h || (a.mode === "chat" ? userText.split("\n")[0] : `${a.name}${subject ? " · " + subject : ""}`);
+  return t.replace(/\*\*/g, "").trim().slice(0, 80);
+}
+function ago(t) {
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return "방금";
+  if (s < 3600) return `${Math.floor(s / 60)}분 전`;
+  if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
+  return new Date(t).toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
+}
+function renderRecent(activeId) {
+  const ul = $("recent");
+  ul.replaceChildren();
+  const list = loadRecent();
+  $("clearRecent").hidden = !list.length;
+  if (!list.length) { ul.append(el("li", "none", "결과를 만들면 여기에 남습니다.")); return; }
+  activeId ??= location.hash.startsWith("#/r/") ? location.hash.slice(4) : null;
+  for (const r of list) {
+    const a = findAgent(r.agent);
+    const li = el("li");
+    const b = el("button", r.id === activeId ? "on" : "");
+    b.title = r.title;
+    b.append(el("span", "t", `${a?.icon || "•"} ${r.title}`), el("span", "m", `${a?.name || r.agent} · ${ago(r.at)}`));
+    b.onclick = () => { location.hash = `#/r/${r.id}`; };
+    li.append(b);
+    ul.append(li);
+  }
+}
+$("clearRecent").onclick = () => {
+  if (!confirm("이 브라우저에 저장된 최근 결과를 모두 지울까요?")) return;
+  try { localStorage.removeItem(RECENT_KEY); } catch { /* 무시 */ }
+  if (location.hash.startsWith("#/r/")) location.hash = "#/"; else renderRecent();
+};
+
+function showRecent(id) {
+  const r = loadRecent().find(x => x.id === id);
+  const a = r && findAgent(r.agent);
+  $("crumb").textContent = r ? `🕘 최근 결과 · ${r.title}` : "🕘 최근 결과";
+  document.title = r ? `${r.title} · 업무 에이전트` : "업무 에이전트";
+  const thread = $("thread");
+  thread.replaceChildren();
+  if (!r) { thread.append(el("div", "msg note", "이 결과를 찾을 수 없습니다 (지워졌거나 다른 브라우저에서 만든 결과).")); return; }
+  if (r.prompt) thread.append(el("div", "msg user", r.prompt));
+  const b = { m: el("div", "msg bot"), ans: el("div", "answer") };
+  b.m.append(b.ans);
+  thread.append(b.m);
+  renderAnswer(b, r.md);
+  if (a && a.mode !== "chat") { b.ans.classList.add("doc-out"); addTools(b, a, r.md); }
+  const note = el("div", "msg note");
+  note.append(`${ago(r.at)} ${a?.name || ""}에서 만든 결과입니다 · `);
+  const open = el("a", null, `${a?.icon || ""} ${a?.name || "에이전트"} 열기`);
+  open.href = `#/${r.agent}`;
+  note.append(open);
+  thread.append(note);
+  chat.scrollTop = 0;
+}
+
+async function loadStatus() {
+  const box = $("status");
+  try {
+    const s = await (await fetch("/api/status")).json();
+    box.replaceChildren();
+    const dot = el("span", "dot" + (s.configured ? "" : " off"));
+    dot.title = s.configured ? "모델 연결 설정됨" : "모델 설정 필요 (.env)";
+    const txt = el("span", "txt");
+    txt.append(`${s.model}`, el("br"), `이미지 보기 ${s.vision ? "켬" : "꺼짐 (OCR 분석)"}`);
+    box.append(dot, txt);
+    box.title = `모델: ${s.model}\n이미지 모델: ${s.vision || "없음"}\n토큰 스트리밍: ${s.streaming ? "켬" : "끔"}`;
+  } catch { box.textContent = ""; }
+}
+
+// 접기(PC) · 서랍(휴대폰)
+const mobile = matchMedia("(max-width: 900px)");
+function setCollapsed(on) {
+  document.body.classList.toggle("collapsed", on);
+  const btn = $("collapse"), label = on ? "메뉴 펼치기" : "메뉴 접기";
+  btn.textContent = on ? "»" : "«";
+  btn.title = label; btn.setAttribute("aria-label", label);
+  btn.setAttribute("aria-expanded", String(!on));
+  try { localStorage.setItem("side-collapsed", on ? "1" : ""); } catch { /* 무시 */ }
+}
+const wide = matchMedia("(min-width: 1280px)");  // 넓은 화면: 마켓이 오른쪽 열, 좁으면 서랍
+const bodyHas = (c) => document.body.classList.contains(c);
+function syncScrim() { $("scrim").hidden = !(bodyHas("menu-open") || (!wide.matches && bodyHas("market-open"))); }
+function openMenu() {
+  closeMarketDrawer();
+  document.body.classList.add("menu-open");
+  $("closeMenu").hidden = false;
+  $("menuBtn").setAttribute("aria-expanded", "true");
+  syncScrim();
+  $("side").querySelector("a, button")?.focus();
+}
+function closeMenu() {
+  if (!bodyHas("menu-open")) return;
+  document.body.classList.remove("menu-open");
+  $("closeMenu").hidden = true;
+  $("menuBtn").setAttribute("aria-expanded", "false");
+  syncScrim();
+}
+function setMarket(open, remember = true) {
+  if (open) closeMenu();
+  document.body.classList.toggle("market-open", open);
+  $("marketBtn").classList.toggle("on", open);
+  $("marketBtn").setAttribute("aria-expanded", String(open));
+  if (wide.matches && remember) { try { localStorage.setItem("market-open", open ? "1" : "0"); } catch { /* 무시 */ } }
+  syncScrim();
+  if (open && !wide.matches) $("mkSearch").focus();
+}
+function closeMarketDrawer() { if (!wide.matches && bodyHas("market-open")) setMarket(false, false); }
+function marketPref() { try { return localStorage.getItem("market-open") !== "0"; } catch { return true; } }  // 처음엔 열어 둔다
+$("collapse").onclick = () => setCollapsed(!bodyHas("collapsed"));
+$("menuBtn").onclick = openMenu;
+$("marketBtn").onclick = () => setMarket(!bodyHas("market-open"));
+$("marketClose").onclick = () => setMarket(false);
+$("closeMenu").onclick = closeMenu;
+$("scrim").onclick = () => { closeMenu(); closeMarketDrawer(); };
+addEventListener("keydown", (e) => { if (e.key === "Escape") { closeMenu(); closeMarketDrawer(); } });
+mobile.addEventListener("change", () => closeMenu());
+wide.addEventListener("change", () => setMarket(wide.matches && marketPref(), false));
+try { if (localStorage.getItem("side-collapsed")) setCollapsed(true); } catch { /* 무시 */ }
+setMarket(wide.matches && marketPref(), false);
+
+// ── Agent 마켓 목록 ──
+let mkCat = "전체", draft = null, pendingAdd = null, justAdded = null;
+$("mkSearch").addEventListener("input", () => renderMarket());
+$("mkBuild").onclick = () => { location.hash = "#/build"; };
+
+function renderMarket() {
+  const cats = $("mkCats");
+  cats.replaceChildren();
+  for (const c of ["전체", ...marketCats]) {
+    const b = el("button", c === mkCat ? "on" : "", c);
+    b.setAttribute("aria-pressed", String(c === mkCat));
+    b.onclick = () => { mkCat = c; renderMarket(); };
+    cats.append(b);
+  }
+  const q = $("mkSearch").value.trim().toLowerCase();
+  const list = market.filter(m => (mkCat === "전체" || m.category === mkCat)
+    && (!q || `${m.name} ${m.description} ${m.category}`.toLowerCase().includes(q)));
+  const ul = $("mkList");
+  ul.replaceChildren();
+  if (!list.length) { ul.append(el("li", "mk-empty", "찾는 Agent 가 없습니다.")); return; }
+  const building = !$("builder").hidden && draft;
+  for (const m of list) {
+    const li = el("li", "mk-card");
+    li.draggable = true;
+    li.dataset.id = m.id;
+    li.title = "끌어다 앱 빌더의 '팀' 에 놓을 수 있습니다";
+    li.ondragstart = (e) => {
+      e.dataTransfer.setData("application/x-agent", m.id);
+      e.dataTransfer.setData("text/plain", m.name);
+      e.dataTransfer.effectAllowed = "copy";
+      li.classList.add("dragging");
+    };
+    li.ondragend = () => li.classList.remove("dragging");
+    const row = el("div", "row");
+    const nm = el("span", "nm", m.name);
+    if (m.new) nm.append(el("span", "badge", "NEW"));
+    row.append(el("span", "ic", m.icon), nm, el("span", "cat", m.category));
+    const acts = el("div", "acts");
+    const use = el("button", "btn", "사용");
+    use.title = `${m.name} 바로 쓰기`;
+    use.onclick = () => { location.hash = `#/${m.route || "m:" + m.id}`; };
+    const inTeam = building && draft.agents.includes(m.id);
+    const add = el("button", "btn" + (inTeam ? " added" : ""), inTeam ? "✓ 담김" : "＋ 담기");
+    add.title = inTeam ? "이미 팀에 있습니다" : `${m.name} 을(를) 앱에 담기`;
+    add.disabled = !!inTeam;
+    add.onclick = () => addToTeam(m.id);
+    acts.append(use, add);
+    li.append(row, el("p", null, m.description), acts);
+    ul.append(li);
+  }
+}
+
+// ── 커스텀 앱 빌더 ──
+const APP_ICONS = ["🧩", "🤖", "🤝", "📦", "🚀", "🧠", "📚", "🛠️", "💼", "📣", "🔬", "⭐"];
+const TEMPLATES = [
+  { name: "회의 후속 처리", icon: "🤝", agents: ["minutes", "action_items", "email"], doc: "optional", run: "pipeline", output: "all",
+    description: "회의 메모로 회의록, 할 일, 공유 메일까지 한 번에 만듭니다.",
+    instructions: "회의록을 먼저 정리하고, 할 일을 뽑은 뒤, 참석자에게 보낼 공유 메일을 쓴다. 최종 결과는 회의록 / 할 일 표 / 메일 순서로 보여준다.",
+    examples: ["회의 메모를 붙여넣으면 회의록·할 일·메일을 만들어 드려요"] },
+  { name: "글로벌 문서 번역", icon: "🌐", agents: ["doc_search", "translator", "proofreader"], doc: "required", run: "pipeline", output: "last",
+    description: "문서에서 필요한 부분을 찾아 번역하고 다듬습니다.",
+    instructions: "요청한 부분을 문서에서 찾고, 번역한 뒤, 번역문을 교정한다. 최종 결과는 번역문과 용어 메모만 보여준다.",
+    examples: ["이 문서의 개요 부분을 영어로 번역해줘"] },
+  { name: "고객 의견 리포트", icon: "📣", agents: ["sentiment", "keywords", "report"], doc: "optional", run: "pipeline", output: "last",
+    description: "리뷰·VOC 를 분석해 키워드와 함께 보고서로 정리합니다.",
+    instructions: "감성 분석과 키워드 추출을 먼저 하고, 두 결과로 개요/현황/분석/향후 계획 보고서를 쓴다.",
+    examples: ["다음 고객 리뷰들을 분석해서 보고서로 만들어줘"] },
+  { name: "발표 준비", icon: "🖥️", agents: ["summary", "swot", "slides"], doc: "required", run: "pipeline", output: "last",
+    description: "문서를 요약하고 SWOT 을 더해 발표 슬라이드 개요를 만듭니다.",
+    instructions: "문서를 요약하고 SWOT 분석을 한 뒤, 둘을 바탕으로 10분 발표용 슬라이드 개요를 만든다.",
+    examples: ["이 문서로 경영진 보고용 발표 개요 만들어줘"] },
+];
+
+async function showBuilder(appId) {
+  const root = $("builder");
+  if (appId) {
+    const res = await fetch(`/api/apps/${appId}`);
+    if (!res.ok) { root.replaceChildren(el("div", "msg note", "앱을 찾을 수 없습니다.")); return; }
+    draft = { run: "pipeline", output: "all", ...(await res.json()) };
+  } else {
+    draft = { name: "", icon: "🧩", description: "", instructions: "", doc: "optional", agents: [], examples: [], run: "pipeline", output: "all" };
+  }
+  if (pendingAdd && !draft.agents.includes(pendingAdd)) draft.agents.push(pendingAdd);
+  pendingAdd = null;
+  $("crumb").textContent = appId ? `✏️ 앱 편집 · ${draft.name}` : "＋ 새 앱 만들기";
+  document.title = `${appId ? "앱 편집" : "새 앱 만들기"} · 업무 에이전트`;
+  renderBuilder();
+  renderMarket();
+}
+
+function renderBuilder() {
+  const root = $("builder");
+  root.replaceChildren();
+  const wrap = el("div", "builder");
+
+  // 왼쪽: 앱 설정
+  const conf = el("section", "bcard");
+  conf.append(el("h2", null, draft.id ? "앱 편집" : "새 앱 만들기"),
+              el("p", "intro", "Agent 마켓에서 Agent 를 끌어다 '팀' 에 놓으세요. 담은 Agent 들이 DeepAgent 의 하위 에이전트가 되어, 정한 실행 방식대로 요청을 나눠 처리합니다."));
+  const field = (label, input, required, help) => {
+    const w = el("div", "field");
+    const l = el("label", null, label); l.htmlFor = input.id;
+    if (required) l.append(el("span", "req", "*"));
+    w.append(l, input);
+    if (help) w.append(el("div", "fhelp", help));
+    return w;
+  };
+  const icon = el("select"); icon.id = "bIcon"; icon.setAttribute("aria-label", "아이콘");
+  for (const i of new Set([draft.icon, ...APP_ICONS])) icon.add(new Option(i, i));
+  icon.value = draft.icon;
+  icon.onchange = () => { draft.icon = icon.value; };
+  const name = el("input"); name.id = "bName"; name.maxLength = 40; name.placeholder = "예: 회의 후속 처리"; name.value = draft.name;
+  name.oninput = () => { draft.name = name.value; };
+  const nr = el("div", "namerow"); nr.append(field("아이콘", icon), field("앱 이름", name, true));
+  const desc = el("input"); desc.id = "bDesc"; desc.maxLength = 300; desc.placeholder = "한 줄 소개 (홈·메뉴에 보입니다)"; desc.value = draft.description;
+  desc.oninput = () => { draft.description = desc.value; };
+  const ins = el("textarea"); ins.id = "bIns"; ins.rows = 4; ins.maxLength = 4000; ins.value = draft.instructions;
+  ins.placeholder = "총괄 에이전트에게 줄 지시 · 예: 회의록을 먼저 정리하고, 할 일을 뽑은 뒤, 공유 메일을 쓴다. 결과는 회의록 / 할 일 / 메일 순서로.";
+  ins.oninput = () => { draft.instructions = ins.value; };
+  const docSeg = el("div", "seg"); docSeg.setAttribute("role", "group"); docSeg.setAttribute("aria-label", "문서 사용");
+  for (const [v, t] of [["none", "사용 안 함"], ["optional", "선택"], ["required", "필수"]]) {
+    const b = el("button", v === draft.doc ? "on" : "", t); b.type = "button";
+    b.setAttribute("aria-pressed", String(v === draft.doc));
+    b.onclick = () => { draft.doc = v; renderBuilder(); };
+    docSeg.append(b);
+  }
+  const segField = (label, key, options, help) => {
+    const s = el("div", "seg"); s.setAttribute("role", "group"); s.setAttribute("aria-label", label);
+    for (const [v, t] of options) {
+      const b = el("button", v === draft[key] ? "on" : "", t); b.type = "button";
+      b.setAttribute("aria-pressed", String(v === draft[key]));
+      b.onclick = () => { draft[key] = v; renderBuilder(); };
+      s.append(b);
+    }
+    const w = el("div", "field");
+    const l = el("div", "lbl", label); l.style.cssText = "font-size:13px;font-weight:600";
+    w.append(l, s);
+    if (help) w.append(el("div", "fhelp", help));
+    return w;
+  };
+  const docWrap = el("div"); docWrap.append(el("div", "lbl", "문서 사용"), docSeg);
+  docWrap.querySelector(".lbl").style.cssText = "font-size:13px;font-weight:600;margin-bottom:4px";
+  const runWrap = segField("실행 방식", "run", [["pipeline", "⛓ 순서대로"], ["auto", "🧠 총괄 에이전트가 판단"]],
+    draft.run === "pipeline"
+      ? "담은 순서대로 모든 Agent 를 실행하고, 앞 단계 결과를 다음 단계에 넘깁니다. 결과가 안정적입니다."
+      : "DeepAgent 총괄 에이전트가 요청을 보고 필요한 Agent 만 골라 맡깁니다. 유연하지만 모델에 따라 단계를 건너뛸 수 있습니다.");
+  const outWrap = segField("결과 보기", "output", [["all", "모든 단계 결과"], ["last", "마지막 결과만"]],
+    "마지막 결과만: 중간 단계 결과는 접어서 함께 보여줍니다.");
+  outWrap.hidden = draft.run !== "pipeline";
+  const ex = el("textarea"); ex.id = "bEx"; ex.rows = 3; ex.value = draft.examples.join("\n");
+  ex.placeholder = "예시 요청 (한 줄에 하나, 최대 5개) — 앱 첫 화면에 버튼으로 보입니다";
+  ex.oninput = () => { draft.examples = ex.value.split("\n").map(s => s.trim()).filter(Boolean).slice(0, 5); };
+  conf.append(nr, field("설명", desc), runWrap, outWrap,
+              field("지시사항", ins, false, draft.run === "pipeline" ? "모든 단계에 함께 전달됩니다 (예: 결과는 한국어 존댓말로)." : "비워 두면 총괄 에이전트가 팀 순서대로 알아서 처리합니다."),
+              docWrap, field("예시 요청", ex));
+
+  // 오른쪽: 팀 구성 (드롭 영역)
+  const teamCard = el("section", "bcard");
+  const h3 = el("h3", null, "팀 구성");
+  h3.append(el("small", null, `${draft.agents.length} / 8 · ${draft.run === "pipeline" ? "위에서부터 실행 순서" : "위에서부터 권장 작업 순서"}`));
+  const flow = el("div", "flow");
+  const names = draft.agents.map(id => { const m = market.find(x => x.id === id); return `${m?.icon || "•"} ${m?.name || id}`; });
+  flow.append(el("span", null, "🙋 사용자"), "→");
+  if (draft.run === "auto") flow.append(el("span", null, "🧠 총괄 에이전트"), "⇄");
+  if (names.length) names.forEach((n, i) => { if (i) flow.append(draft.run === "pipeline" ? "→" : "·"); flow.append(el("span", null, n)); });
+  else flow.append(el("span", null, "(Agent 를 담으세요)"));
+  flow.append("→", el("span", null, draft.run === "pipeline" && draft.output === "last" ? "📄 마지막 결과" : "📄 결과"));
+  const team = el("ol", "team"); team.id = "team";
+  team.setAttribute("aria-label", "팀에 담은 Agent (여기에 끌어다 놓기)");
+  if (!draft.agents.length) {
+    const ph = el("li", "ph");
+    ph.append(el("b", null, "⬇"), "여기에 Agent 를 끌어다 놓으세요", el("br"), "또는 마켓에서 ＋ 담기 · 아래 추천 조합으로 시작");
+    team.append(ph);
+  }
+  draft.agents.forEach((id, i) => {
+    const m = market.find(x => x.id === id) || { name: id, icon: "•", description: "" };
+    const li = el("li", "member" + (id === justAdded ? " new" : ""));  // 방금 담은 것만 나타나는 효과
+    const tx = el("div", "tx"); tx.append(el("b", null, m.name), el("span", null, m.description));
+    const mv = el("div", "mv");
+    const btn = (t, label, fn, dis) => { const b = el("button", "iconbtn", t); b.type = "button"; b.title = label; b.setAttribute("aria-label", `${m.name} ${label}`); b.disabled = !!dis; b.onclick = fn; return b; };
+    mv.append(btn("↑", "위로", () => moveMember(i, -1), i === 0),
+              btn("↓", "아래로", () => moveMember(i, 1), i === draft.agents.length - 1),
+              btn("✕", "빼기", () => { draft.agents.splice(i, 1); renderBuilder(); renderMarket(); }));
+    li.append(el("span", "no", String(i + 1)), el("span", "ic", m.icon), tx, mv);
+    team.append(li);
+  });
+  team.ondragover = (e) => { if (e.dataTransfer.types.includes("application/x-agent")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; team.classList.add("over"); } };
+  team.ondragleave = (e) => { if (!team.contains(e.relatedTarget)) team.classList.remove("over"); };
+  team.ondrop = (e) => {
+    const id = e.dataTransfer.getData("application/x-agent");
+    team.classList.remove("over");
+    if (id) { e.preventDefault(); addToTeam(id); }
+  };
+  const openMk = el("button", "btn", "🧩 Agent 마켓 열기"); openMk.type = "button";
+  openMk.onclick = () => setMarket(true);
+  const tpls = el("div", "tpls");
+  for (const t of TEMPLATES) {
+    const b = el("button", "chip", `${t.icon} ${t.name}`); b.type = "button";
+    b.title = t.agents.map(id => market.find(x => x.id === id)?.name || id).join(" → ");
+    b.onclick = () => { draft = { ...draft, ...structuredClone(t), id: draft.id }; renderBuilder(); renderMarket(); };
+    tpls.append(b);
+  }
+  const tplWrap = el("div"); tplWrap.append(el("div", "fhelp", "추천 조합 (누르면 채워집니다)"), tpls);
+  teamCard.append(h3, flow, team, openMk, tplWrap);
+
+  // 저장
+  const actions = el("div", "bactions");
+  const err = el("span", "ferr"); err.id = "bErr"; err.setAttribute("role", "alert");
+  const cancel = el("button", "btn", "취소"); cancel.type = "button";
+  cancel.onclick = () => { location.hash = draft.id ? `#/app:${draft.id}` : "#/"; };
+  const save = el("button", "btn primary", draft.id ? "저장하고 실행" : "앱 만들기"); save.id = "bSave"; save.type = "button";
+  save.onclick = () => saveApp(err, save);
+  actions.append(err);
+  if (draft.id) {
+    const del = el("button", "btn danger", "앱 삭제"); del.type = "button";
+    del.onclick = () => deleteApp(draft.id, draft.name);
+    actions.append(del);
+  }
+  actions.append(cancel, save);
+  wrap.append(conf, teamCard, actions);
+  root.append(wrap);
+  justAdded = null;
+}
+
+function moveMember(i, d) {
+  const a = draft.agents;
+  [a[i], a[i + d]] = [a[i + d], a[i]];
+  renderBuilder();
+}
+
+// 마켓에서 담기: 빌더가 열려 있으면 팀에 넣고, 아니면 새 앱 빌더를 그 Agent 로 연다
+function addToTeam(id) {
+  if ($("builder").hidden || !draft) { pendingAdd = id; location.hash = "#/build"; return; }
+  if (draft.agents.includes(id)) return;
+  if (draft.agents.length >= 8) { $("bErr").textContent = "Agent 는 8개까지 담을 수 있습니다."; return; }
+  draft.agents.push(id);
+  justAdded = id;
+  renderBuilder();
+  renderMarket();
+}
+
+async function saveApp(err, btn) {
+  err.textContent = "";
+  if (!draft.name.trim()) { err.textContent = "앱 이름을 입력하세요."; $("bName").focus(); return; }
+  if (!draft.agents.length) { err.textContent = "Agent 를 하나 이상 담아 주세요."; return; }
+  btn.disabled = true;
+  const body = JSON.stringify({ name: draft.name, icon: draft.icon, description: draft.description, instructions: draft.instructions,
+                                doc: draft.doc, agents: draft.agents, examples: draft.examples, run: draft.run, output: draft.output });
+  try {
+    const res = await fetch(draft.id ? `/api/apps/${draft.id}` : "/api/apps",
+      { method: draft.id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
+    await loadApps();
+    location.hash = `#/app:${data.id}`;
+  } catch (e) { err.textContent = `저장 실패: ${e.message}`; btn.disabled = false; }
+}
+
+async function deleteApp(id, name) {
+  if (!confirm(`'${name}' 앱을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  const res = await fetch(`/api/apps/${id}`, { method: "DELETE" });
+  if (!res.ok) { $("bErr").textContent = "삭제하지 못했습니다."; return; }
+  await loadApps();
+  location.hash = "#/";
+}
+
+// ── 문서 목록 ──
 async function loadDocs(selectPath) {
   docs = await (await fetch("/api/documents")).json();
   const sel = $("doc");
+  const keep = selectPath || sel.value;  // 불러오는 동안 사용자가 바꾼 선택을 되돌리지 않도록 응답 뒤에 읽는다
   const known = new Set(docs.map(d => d.path));
-  // 업로드만 되고 아직 인덱싱 안 된 문서도 목록에 남긴다
   [...sel.options].forEach(o => { if (o.value && !known.has(o.value)) docs.push({ path: o.value, filename: o.textContent, pending: true }); });
-  sel.innerHTML = '<option value="">문서를 선택하세요</option>' +
-    docs.map(d => `<option value="${d.path}">${d.filename}</option>`).join("");
-  if (selectPath) sel.value = selectPath;
+  sel.innerHTML = "";
+  sel.add(new Option(agent && agent.doc === "optional" ? "참고 문서 없음" : "문서를 선택하세요", ""));
+  for (const d of docs) sel.add(new Option(d.filename, d.path));
+  if (keep) sel.value = keep;
+  if (!sel.value && docs.length === 1 && (!agent || agent.doc === "required")) sel.value = docs[0].path;
   showInfo();
+  renderSideDocs();
+}
+
+function docSummary(d) {
+  if (d.pending || !d.chunks) return "인덱싱 전";
+  return d.unit === "section"
+    ? `${KIND[d.kind] || d.kind} · 텍스트 ${d.pages}개 구간`
+    : `${KIND[d.kind] || d.kind} · ${d.pages}페이지 · OCR ${d.ocr_pages.length}페이지`;
 }
 
 function showInfo() {
   const d = docs.find(x => x.path === $("doc").value);
   $("docInfo").textContent = !d ? "" : d.pending || !d.chunks
-    ? "아직 인덱싱 전 — 첫 질문 때 자동으로 수집합니다 (시간이 걸립니다)."
-    : `${d.pages}페이지 · 청크 ${d.chunks}개 · OCR 페이지 ${d.ocr_pages.length ? d.ocr_pages.join(", ") : "없음"}`;
+    ? "아직 인덱싱 전 — 처음 실행할 때 자동으로 읽어 들입니다 (10쪽에 1분 정도)."
+    : docSummary(d) + ` · 청크 ${d.chunks}개`;
+  const line = document.querySelector(".docline");
+  if (line) fillDocLine(line);
 }
 
+$("doc").onchange = () => {
+  showInfo();
+  renderSideDocs();
+  if (agent?.mode === "chat" || produced) newChat(true);
+};
+
+// ── 업로드: 버튼 또는 화면 아무 곳에나 끌어다 놓기 ──
 async function upload(file) {
   if (!file) return;
-  $("uploadMsg").innerHTML = '<span class="spinner"></span>업로드 중…';
+  closeMenu();
+  const inThread = !!agent && agent.doc !== "none";  // 문서를 쓰는 화면이면 대화에 진행 상황을 남긴다
+  const note = inThread ? addNote(`⏳ ${file.name} 업로드 중…`) : null;
   const fd = new FormData(); fd.append("file", file);
   const res = await fetch("/api/upload", { method: "POST", body: fd });
   const data = await res.json();
-  if (!res.ok) { $("uploadMsg").textContent = data.detail; return; }
-  $("uploadMsg").textContent = `업로드 완료: ${data.filename}` + (data.indexed ? " (이미 인덱싱됨)" : "");
-  const opt = new Option(data.filename, data.pdf_path); $("doc").add(opt);
+  if (!res.ok) { if (note) note.textContent = `⚠ ${data.detail}`; else alert(data.detail); return; }
+  $("doc").add(new Option(data.filename, data.pdf_path));
   await loadDocs(data.pdf_path);
+  if (!inThread) return;  // 홈 등: 메뉴의 문서 목록에 선택된 채로 나타난다
+  if (agent.mode === "chat" || produced) newChat(true);
+  else note.remove();
+  addNote(`📄 ${data.filename} 업로드 완료` + (data.indexed ? " (이미 인덱싱됨)" : " — 처음 실행할 때 문서를 읽어 들입니다"));
+  $("q").focus();
+}
+$("attach").onclick = $("sideUpload").onclick = () => $("file").click();
+$("file").onchange = (e) => { upload(e.target.files[0]); e.target.value = ""; };
+let dragDepth = 0;
+// 파일을 끌 때만 업로드 안내를 띄운다 (마켓의 Agent 카드를 끌 때는 앱 빌더의 팀 영역이 받는다)
+const isFileDrag = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+addEventListener("dragenter", (e) => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  if (agent?.mode === "game" || !$("builder").hidden) return;
+  dragDepth++;
+  $("dropzone").textContent = agent?.mode === "image" ? "여기에 놓으면 이 이미지를 분석합니다" : "여기에 놓으면 문서를 업로드합니다";
+  $("dropzone").classList.add("on");
+});
+addEventListener("dragleave", (e) => { if (isFileDrag(e) && --dragDepth <= 0) { dragDepth = 0; $("dropzone").classList.remove("on"); } });
+addEventListener("dragover", (e) => { if (isFileDrag(e)) e.preventDefault(); });
+addEventListener("drop", (e) => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault(); dragDepth = 0; $("dropzone").classList.remove("on");
+  if (agent?.mode === "game" || !$("builder").hidden) return;
+  if (agent?.mode === "image") uploadImage(e.dataTransfer.files[0]);
+  else upload(e.dataTransfer.files[0]);
+});
+
+// ── 이미지: 고르기 · 끌어다 놓기 · 붙여넣기(Ctrl+V) ──
+let image = null;  // {image_id, url, filename, width, height}
+$("imgFile").onchange = (e) => { uploadImage(e.target.files[0]); e.target.value = ""; };
+addEventListener("paste", (e) => {
+  if (agent?.mode !== "image") return;
+  const file = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith("image/"));
+  if (file) { e.preventDefault(); uploadImage(file); }
+});
+
+async function uploadImage(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/") && !/\.(png|jpe?g|webp|bmp|gif|tiff?)$/i.test(file.name)) {
+    pickStatus("이미지 파일(PNG, JPG, WebP, GIF, BMP, TIFF)만 올릴 수 있습니다.", true); return;
+  }
+  if (busy) { addNote("분석이 끝난 뒤에 새 이미지를 올려 주세요."); return; }
+  pickStatus(`⏳ ${file.name || "붙여넣은 이미지"} 올리는 중…`);
+  const fd = new FormData(); fd.append("file", file, file.name || "pasted.png");
+  const res = await fetch("/api/images", { method: "POST", body: fd });
+  const data = await res.json();
+  if (!res.ok) { pickStatus(`⚠ ${data.detail}`, true); return; }
+  image = data;
+  if (produced) newChat(true);  // 분석하던 이미지가 있으면 새 이미지로 새로 시작
+  else renderPicker();
 }
 
-$("file").onchange = (e) => upload(e.target.files[0]);
-const drop = $("drop");
-drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
-drop.ondragleave = () => drop.classList.remove("over");
-drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); upload(e.dataTransfer.files[0]); };
-$("doc").onchange = showInfo;
+// 이미지 선택 영역의 상태 문구 (양식이 없으면 대화 안내로)
+function pickStatus(text, isErr) {
+  const meta = document.querySelector(".imgpick .meta");
+  if (meta) { meta.replaceChildren(el("b", null, text)); meta.firstChild.style.color = isErr ? "var(--warn)" : ""; }
+  else addNote(text);
+}
 
-$("ask").onclick = async () => {
-  const pdf_path = $("doc").value, question = $("q").value.trim();
-  if (!pdf_path || !question) { alert("문서와 질문을 입력하세요."); return; }
-  $("ask").disabled = true;
-  $("resultCard").hidden = false;
-  $("result").innerHTML = '<span class="spinner"></span>에이전트가 작업 중입니다…';
-  $("steps").innerHTML = "";
-  try {
-    const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({ pdf_path, question }) });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail);
-    $("result").textContent = data.answer;
-    $("steps").innerHTML = data.steps.map(s => `<li><b>${s.agent}</b> — ${s.task.slice(0, 160)}</li>`).join("");
-  } catch (e) {
-    $("result").innerHTML = '<span class="err"></span>';
-    $("result").firstChild.textContent = `오류: ${e.message}`;
-  } finally {
-    $("ask").disabled = false;
-    loadDocs(pdf_path);
+function renderPicker() {
+  const box = document.querySelector(".imgpick");
+  if (!box) return;
+  box.replaceChildren();
+  const meta = el("div", "meta");
+  if (image) {
+    const img = el("img"); img.src = image.url; img.alt = image.filename;
+    meta.append(el("b", null, image.filename), el("span", null, `${image.width}×${image.height} · 눌러서 다른 이미지로 바꾸기`));
+    box.append(img, meta);
+  } else {
+    meta.append(el("b", null, "이미지를 끌어다 놓거나, 눌러서 고르거나, Ctrl+V 로 붙여넣으세요"),
+                el("span", null, "PNG · JPG · WebP · GIF · BMP · TIFF, 20MB 까지"));
+    box.append(el("div", "big", "🖼️"), meta);
   }
-};
+}
 
-loadDocs();
+// ── 첫 화면: 채팅형은 예시 질문, 양식형은 입력 양식 ──
+function showEmpty() {
+  produced = false;
+  if (agent.mode === "form" || agent.mode === "image") return showForm();
+  const box = el("div", "empty");
+  box.append(el("h2", null, `${agent.icon} ${agent.name}`));
+  box.append(el("div", null, agent.intro));
+  if (agent.team) {  // 커스텀 앱: 팀 구성과 편집 버튼
+    const tc = el("div", "teamchips");
+    tc.append(agent.run === "auto" ? "🧠 총괄 에이전트가 판단 · 팀: " : "⛓ 순서대로: ");
+    agent.team.forEach((id, i) => {
+      const m = market.find(x => x.id === id);
+      if (i) tc.append(agent.run === "auto" ? "·" : "→");
+      tc.append(el("span", "m", `${m?.icon || "•"} ${m?.name || id}`));
+    });
+    const edit = el("a", "btn", "✏️ 앱 편집"); edit.href = `#/build/${agent.appId}`;
+    edit.style.marginLeft = "8px";
+    tc.append(edit);
+    box.append(tc);
+    if (agent.doc === "required") box.append(el("div", "fhelp", "이 앱은 문서가 필요합니다. 위에서 문서를 고르세요."));
+  }
+  const chips = el("div", "chips");
+  for (const ex of agent.examples) {
+    const c = el("button", "chip", ex);
+    c.onclick = () => { $("q").value = ex; send(); };
+    chips.append(c);
+  }
+  box.append(chips);
+  $("thread").replaceChildren(box);
+  setComposer(agent.id === "qa" ? "문서에 대해 질문하세요" : `${agent.name}에게 요청하세요`,
+              "Enter 보내기 · Shift+Enter 줄바꿈 · 이어서 요청하면 앞의 대화를 기억합니다");
+}
+
+function fillDocLine(line) {
+  const d = docs.find(x => x.path === $("doc").value);
+  line.classList.toggle("warn", !d && agent.doc === "required");
+  line.textContent = d ? `📄 참고 문서: ${d.filename}`
+    : agent.doc === "required" ? "⚠ 위에서 요약할 문서를 고르거나 📎 로 올려 주세요."
+    : "참고 문서 없음 — 입력한 내용만으로 작성합니다. 위에서 문서를 고르면 그 내용을 근거로 씁니다.";
+}
+
+function showForm() {
+  const values = formValues[agent.id] ||= {};
+  const card = el("form", "formcard");
+  const head = el("div", "fhead");
+  head.append(el("div", "ico", agent.icon), el("h2", null, agent.name));
+  card.append(head, el("p", "intro", agent.intro));
+  if (agent.mode === "image") {
+    const pick = el("div", "imgpick");
+    pick.tabIndex = 0; pick.setAttribute("role", "button"); pick.setAttribute("aria-label", "이미지 고르기");
+    pick.onclick = () => $("imgFile").click();
+    pick.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("imgFile").click(); } };
+    card.append(pick);
+  } else if (agent.doc !== "none") {
+    const line = el("div", "docline");
+    card.append(line);
+    fillDocLine(line);
+  }
+
+  const grid = el("div", "fields");
+  // 입력칸은 직접 들고 있는다. form.elements["length"] 는 필드가 아니라 요소 개수(숫자)를 돌려주기 때문
+  const inputsByKey = {};
+  for (const f of agent.fields) {
+    const wrap = el("div", "field" + (f.type === "textarea" ? " wide" : ""));
+    const id = `f-${agent.id}-${f.key}`;
+    const label = el("label", null, f.label); label.htmlFor = id;
+    if (f.required) label.append(el("span", "req", "*"));
+    let input;
+    if (f.type === "select") {
+      input = el("select");
+      for (const o of f.options) input.add(new Option(o, o));
+    } else {
+      input = el(f.type === "textarea" ? "textarea" : "input");
+      if (f.type !== "textarea") input.type = "text";
+      if (f.placeholder) input.placeholder = f.placeholder;
+    }
+    input.id = id; input.name = f.key;
+    input.value = values[f.key] ?? f.default ?? (f.type === "select" ? f.options[0] : "");
+    inputsByKey[f.key] = input;
+    wrap.append(label, input);
+    // 선택지별 안내(예: 신문사 논조)는 고른 값의 설명을 바로 아래에 보여준다
+    const help = f.guides ? el("div", "fhelp") : null;
+    if (help) { help.id = `${id}-help`; input.setAttribute("aria-describedby", help.id); wrap.append(help); }
+    const showHelp = () => { if (help) help.textContent = f.guides[input.value] || ""; };
+    input.oninput = input.onchange = () => { values[f.key] = input.value; showHelp(); };
+    showHelp();
+    grid.append(wrap);
+  }
+  const actions = el("div", "factions");
+  const err = el("span", "ferr");
+  const submit = el("button", "btn primary", SUBMIT[agent.id] || "작성하기"); submit.type = "submit";
+  actions.append(err, submit);
+  card.append(grid, actions);
+
+  card.onsubmit = (e) => {
+    e.preventDefault();
+    const inputs = {};
+    for (const f of agent.fields) inputs[f.key] = inputsByKey[f.key].value.trim();
+    const missing = agent.fields.find(f => f.required && !inputs[f.key]);
+    if (missing) { err.textContent = `'${missing.label}' 을(를) 입력하세요.`; inputsByKey[missing.key].focus(); return; }
+    if (agent.doc === "required" && !$("doc").value) { err.textContent = "먼저 문서를 고르거나 올려 주세요."; return; }
+    if (agent.mode === "image" && !image) { err.textContent = "먼저 이미지를 올려 주세요."; card.querySelector(".imgpick").focus(); return; }
+    err.textContent = "";
+    const summary = agent.fields.filter(f => inputs[f.key]).map(f => `${f.label}: ${inputs[f.key]}`).join("\n");
+    card.remove();
+    run({ inputs }, `${agent.icon} ${agent.name} 요청\n${summary}`);
+  };
+  $("thread").replaceChildren(card);
+  if (agent.mode === "image") {
+    renderPicker();
+    setComposer("이미지를 올린 뒤 분석하기를 누르거나, 궁금한 점을 바로 적으세요",
+                "분석 결과가 나오면 같은 이미지에 대해 이어서 질문할 수 있습니다");
+    card.querySelector(".imgpick").focus();
+  } else {
+    setComposer("양식을 채우고 작성 버튼을 누르세요 (또는 원하는 내용을 자유롭게 적어도 됩니다)",
+                "결과가 나오면 여기에 수정 요청을 적어 이어서 고칠 수 있습니다");
+    card.querySelector("input, textarea")?.focus();
+  }
+}
+
+function setComposer(placeholder, hint) { $("q").placeholder = placeholder; $("hint").textContent = hint; autosize(); }
+
+function newChat(silent) {
+  if (busy && controller) controller.abort();
+  fetch(`/api/conversations/${convId}`, { method: "DELETE" }).catch(() => {});
+  convId = newId();
+  loadDocs();
+  showEmpty();
+  if (!silent) $("q").focus();
+}
+$("newChat").onclick = () => { image = null; newChat(false); };
+
+function addNote(text) {
+  $("thread").querySelector(".empty")?.remove();
+  const n = el("div", "msg note", text);
+  $("thread").append(n); stick = true; follow();
+  return n;
+}
+
+function addUser(text, imgUrl) {
+  $("thread").querySelector(".empty")?.remove();
+  const m = el("div", "msg user");
+  if (imgUrl) { const img = el("img"); img.src = imgUrl; img.alt = "올린 이미지"; m.append(img); }
+  m.append(text);
+  $("thread").append(m);
+  stick = true; follow();
+}
+
+function addBot() {
+  const m = el("div", "msg bot");
+  const prog = el("details", "progress"); prog.open = true;
+  const sum = el("summary", null, "생각하는 중…");
+  const trace = el("ol", "trace");
+  prog.append(sum, trace);
+  const ans = el("div", "answer plain");
+  ans.innerHTML = '<span class="spinner"></span>';
+  m.append(prog, ans);
+  $("thread").append(m); follow();
+  return { m, prog, sum, trace, ans, t0: performance.now(), steps: 0, draft: "" };
+}
+
+function addStep(b, ev) {
+  b.trace.querySelector("li.active")?.classList.remove("active");
+  // 단계 종류는 k- 접두어로 (그냥 'answer' 를 쓰면 답변 칸 .answer 스타일·선택자와 겹친다)
+  const li = el("li", [`k-${ev.kind}`, ev.sub ? "sub" : "", ev.kind === "result" ? "" : "active"].join(" "));
+  li.append(el("span", "ic", ev.kind === "result" ? "" : (ICON[ev.kind] || "•")),
+            el("span", "tx", ev.kind === "result" ? ev.text : (ev.sub ? "[서브] " : "") + ev.text),
+            el("span", "time", `${((performance.now() - b.t0) / 1000).toFixed(1)}s`));
+  b.trace.append(li);
+  if (ev.kind !== "result") { b.steps++; b.sum.textContent = ev.text; }
+  follow();
+}
+
+function finishTrace(b, status) {
+  b.trace.querySelector("li.active")?.classList.remove("active");
+  const sec = ((performance.now() - b.t0) / 1000).toFixed(1);
+  b.sum.textContent = { ok: `${b.steps}단계 · ${sec}초`, stop: `중지됨 · ${sec}초`, err: `오류 · ${sec}초` }[status];
+  b.prog.open = status === "err";
+}
+
+async function readSSE(res, onEvent) {
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const line = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (line.startsWith("data: ")) onEvent(JSON.parse(line.slice(6)));
+    }
+  }
+}
+
+function setBusy(on) {
+  busy = on;
+  $("send").textContent = on ? "■" : "↑";
+  $("send").classList.toggle("stop", on);
+  $("send").title = on ? "중지" : "보내기 (Enter)";
+  document.querySelectorAll(".formcard .btn.primary").forEach(btn => { btn.disabled = on; });
+  updateSend();
+}
+function updateSend() { $("send").disabled = !busy && !$("q").value.trim(); }
+
+// 입력창: 채팅형은 질문, 양식형은 (결과 전) 자유 요청 / (결과 후) 수정 요청
+function send() {
+  if (busy) { controller?.abort(); return; }
+  const question = $("q").value.trim();
+  if (!question) return;
+  if (agent.mode === "image" && !image) { addNote("먼저 이미지를 올려 주세요 (끌어다 놓기 · 고르기 · Ctrl+V)."); return; }
+  $("q").value = ""; autosize();
+  if (agent.mode === "form" || agent.mode === "image") $("thread").querySelector(".formcard")?.remove();
+  run({ question }, question);
+}
+
+async function run(body, userText) {
+  const pdf_path = agent.doc === "none" ? null : $("doc").value || null;
+  if (agent.doc === "required" && !pdf_path) {
+    if (agent.mode === "form" && !produced) showForm();  // 입력창으로 보낸 경우 치운 양식을 되살린다
+    addNote("먼저 위에서 문서를 고르거나 📎 로 올려 주세요.");
+    return;
+  }
+  const current = agent, revising = produced;
+  if (current.mode === "image") body = { ...body, image_id: image.image_id, image_name: image.filename };
+  addUser(userText, current.mode === "image" && !produced ? image.url : null);
+  const b = addBot();
+  setBusy(true);
+  controller = new AbortController();
+  let gotFinal = false;
+  try {
+    const res = await fetch(`/api/agents/${encodeURIComponent(current.id)}/stream`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
+      body: JSON.stringify({ ...body, pdf_path, conversation_id: convId }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail);
+    await readSSE(res, (ev) => {
+      if (ev.type === "step") addStep(b, ev);
+      else if (ev.type === "token") {
+        b.draft += ev.text;
+        b.ans.textContent = b.draft; b.ans.classList.add("cursor"); follow();
+      } else if (ev.type === "reset") {
+        b.draft = ""; b.ans.classList.remove("cursor"); b.ans.innerHTML = '<span class="spinner"></span>';
+      } else if (ev.type === "final") {
+        gotFinal = true;
+        b.ans.classList.remove("cursor");
+        renderAnswer(b, ev.answer);
+        const subject = current.mode === "image" ? body.image_name : docs.find(d => d.path === pdf_path)?.filename;
+        const title = recentTitle(current, ev.answer, userText, subject);
+        saveRecent({ id: newId().slice(0, 12), agent: current.id, at: Date.now(), md: ev.answer, prompt: userText,
+                     title: revising && current.mode !== "chat" ? `${title} (수정)` : title });
+        if (current.mode === "form") {
+          b.ans.classList.add("doc-out");
+          addTools(b, current, ev.answer);
+          produced = true;
+          setComposer(`수정 요청 (${current.revise_hint})`, "수정 요청을 반영해 문서 전체를 다시 작성합니다 · ＋ 새로 시작 을 누르면 양식으로 돌아갑니다");
+        } else if (current.mode === "image") {
+          addTools(b, current, ev.answer);
+          produced = true;
+          setComposer(`이어서 질문 (${current.revise_hint})`, "같은 이미지에 대해 이어서 묻습니다 · 새 이미지를 끌어다 놓거나 붙여넣으면 새로 분석합니다");
+        }
+        renderSources(b, ev.doc_id, ev.sources || []);
+        finishTrace(b, "ok");
+        follow();
+      } else if (ev.type === "error") throw new Error(ev.message);
+    });
+    if (!gotFinal) throw new Error("연결이 끊겼습니다.");
+  } catch (e) {
+    const stopped = e.name === "AbortError";
+    finishTrace(b, stopped ? "stop" : "err");
+    b.ans.classList.remove("cursor");
+    if (stopped) {
+      if (!b.draft) b.ans.textContent = "(중지했습니다)";
+    } else {
+      b.ans.className = "answer";
+      b.ans.replaceChildren(el("span", "err", `오류: ${e.message}`));
+    }
+    if ((current.mode === "form" || current.mode === "image") && !produced && agent === current) {
+      const again = el("button", "btn", "양식으로 돌아가기");
+      again.onclick = () => showForm();
+      b.m.append(el("div", "tools")); b.m.lastChild.append(again);
+    }
+  } finally {
+    setBusy(false);
+    loadDocs();  // 인덱싱 상태 갱신
+    $("q").focus();
+  }
+}
+
+// ── 오목: 사람 vs AI (AI 수는 서버 /api/omok/move) ──
+const N = 15, HOSHI = new Set(["3,3", "3,11", "7,7", "11,3", "11,11"]);
+const omok = { board: null, human: 1, level: "보통", moves: [], over: false, thinking: false, win: [], gen: 0 };
+function omokStats() {
+  try { return JSON.parse(localStorage.getItem("omok-stats")) || { win: 0, lose: 0, draw: 0 }; }
+  catch { return { win: 0, lose: 0, draw: 0 }; }
+}
+function saveStats(s) { try { localStorage.setItem("omok-stats", JSON.stringify(s)); } catch { /* 저장 못 해도 게임은 계속 */ } }
+try { Object.assign(omok, JSON.parse(localStorage.getItem("omok-prefs")) || {}); } catch { /* 기본값 사용 */ }
+
+function renderOmok() {
+  const root = $("game");
+  root.replaceChildren();
+  const wrap = el("div", "omok");
+  const side = el("aside", "omok-side");
+  side.append(el("h2", null, `${agent.icon} ${agent.name}`), el("p", null, agent.intro));
+
+  const seg = (label, options, value, onPick) => {
+    const box = el("div");
+    box.append(el("div", "lbl", label));
+    const s = el("div", "seg"); s.setAttribute("role", "group"); s.setAttribute("aria-label", label);
+    for (const [v, text] of options) {
+      const b = el("button", v === value ? "on" : "", text);
+      b.setAttribute("aria-pressed", v === value);
+      b.onclick = () => onPick(v);
+      s.append(b);
+    }
+    box.append(s);
+    return box;
+  };
+  const savePrefs = () => { try { localStorage.setItem("omok-prefs", JSON.stringify({ human: omok.human, level: omok.level })); } catch { /* 무시 */ } };
+  side.append(
+    seg("내 돌 (바꾸면 새 게임)", [[1, "⚫ 흑 · 선공"], [2, "⚪ 백 · 후공"]], omok.human, (v) => { omok.human = v; savePrefs(); renderOmok(); }),
+    seg("난이도 (바꾸면 새 게임)", [["쉬움", "쉬움"], ["보통", "보통"], ["어려움", "어려움"]], omok.level, (v) => { omok.level = v; savePrefs(); renderOmok(); }),
+  );
+  const status = el("div", "ostatus"); status.id = "omokStatus"; status.setAttribute("aria-live", "polite");
+  const row = el("div", "orow");
+  const again = el("button", "btn primary", "새 게임"); again.id = "omokNew"; again.onclick = () => renderOmok();
+  const undo = el("button", "btn", "↶ 무르기"); undo.id = "omokUndo"; undo.onclick = omokUndo;
+  row.append(again, undo);
+  const stats = el("div", "ostats");
+  const st = omokStats();
+  const reset = el("button", null, "기록 지우기");
+  reset.onclick = () => { saveStats({ win: 0, lose: 0, draw: 0 }); renderOmok(); };
+  stats.append(el("span", null, `전적 ${st.win}승 ${st.lose}패 ${st.draw}무`), reset);
+  side.append(status, row, stats);
+
+  const board = el("div", "board"); board.id = "board";
+  board.setAttribute("role", "grid"); board.setAttribute("aria-label", "오목판 15×15");
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const pt = el("button", "pt" + (c === 0 ? " L" : "") + (c === N - 1 ? " R" : "") + (r === 0 ? " T" : "") + (r === N - 1 ? " B" : ""));
+    pt.dataset.r = r; pt.dataset.c = c;
+    if (HOSHI.has(`${r},${c}`)) pt.append(el("span", "hoshi"));
+    pt.append(el("span", "ghost"));
+    pt.onclick = () => omokPlay(r, c);
+    board.append(pt);
+  }
+  const bw = el("div", "boardwrap"); bw.append(board);
+  wrap.append(side, bw);
+  root.append(wrap);
+
+  omok.gen++;  // 진행 중이던 AI 응답은 버린다
+  Object.assign(omok, { board: Array.from({ length: N }, () => Array(N).fill(0)), moves: [], over: false, thinking: false, win: [] });
+  drawOmok();
+  if (omok.human === 2) omokAi();  // 내가 백이면 AI(흑)가 먼저 둔다
+  else omokStatus("당신 차례입니다 (⚫ 흑) · 원하는 곳에 두세요");
+}
+
+function drawOmok() {
+  const board = $("board");
+  if (!board) return;
+  const last = omok.moves[omok.moves.length - 1];
+  const win = new Set(omok.win.map(([r, c]) => `${r},${c}`));
+  for (const pt of board.children) {
+    const r = +pt.dataset.r, c = +pt.dataset.c, v = omok.board[r][c];
+    pt.querySelector(".stone")?.remove();
+    pt.classList.toggle("taken", !!v);
+    if (v) {
+      const s = el("span", "stone " + (v === 1 ? "b" : "w"));
+      if (last && last[0] === r && last[1] === c) s.classList.add("last");
+      if (win.has(`${r},${c}`)) s.classList.add("win");
+      pt.append(s);
+    }
+    pt.disabled = omok.over || omok.thinking || !!v;
+    pt.setAttribute("aria-label", `${r + 1}행 ${c + 1}열 ${v === 1 ? "흑" : v === 2 ? "백" : "빈칸"}`);
+  }
+  const myTurn = !omok.over && !omok.thinking;
+  board.classList.toggle("myturn", myTurn);
+  board.classList.toggle("human-b", omok.human === 1);
+  board.classList.toggle("human-w", omok.human === 2);
+  $("omokUndo").disabled = omok.thinking || omok.over || !omok.moves.some(m => m[2] === omok.human);
+}
+
+function omokStatus(text, cls) {
+  const s = $("omokStatus");
+  s.textContent = text;
+  s.className = "ostatus" + (cls ? " " + cls : "");
+}
+
+function omokFinish(winner, line, draw) {
+  omok.over = true; omok.win = line || [];
+  const st = omokStats();
+  if (draw) { st.draw++; omokStatus("무승부입니다."); }
+  else if (winner === omok.human) { st.win++; omokStatus("🎉 이겼습니다!", "win"); }
+  else { st.lose++; omokStatus("AI 가 이겼습니다. 한 판 더?", "lose"); }
+  saveStats(st);
+  const s = $("game").querySelector(".ostats span");
+  if (s) s.textContent = `전적 ${st.win}승 ${st.lose}패 ${st.draw}무`;
+  drawOmok();
+}
+
+function omokPlay(r, c) {
+  if (omok.over || omok.thinking || omok.board[r][c]) return;
+  omok.board[r][c] = omok.human;
+  omok.moves.push([r, c, omok.human]);
+  omokAi();
+}
+
+async function omokAi() {
+  const gen = omok.gen, ai = 3 - omok.human;
+  omok.thinking = true;
+  omokStatus(`AI(${omok.level}) 생각 중…`);
+  drawOmok();
+  try {
+    const res = await fetch("/api/omok/move", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ board: omok.board, ai, level: omok.level }),
+    });
+    const data = await res.json();
+    if (gen !== omok.gen) return;  // 그 사이 새 게임을 시작했다
+    if (!res.ok) throw new Error(data.detail);
+    omok.thinking = false;
+    if (data.move) {
+      const [r, c] = data.move;
+      omok.board[r][c] = ai;
+      omok.moves.push([r, c, ai]);
+    }
+    if (data.winner || data.draw) return omokFinish(data.winner, data.line, data.draw);
+    omokStatus(`당신 차례입니다 (${omok.human === 1 ? "⚫ 흑" : "⚪ 백"}) · ${omok.moves.length}수`);
+    drawOmok();
+  } catch (e) {
+    if (gen !== omok.gen) return;
+    omok.thinking = false;
+    // AI 수를 받지 못했으면 방금 둔 내 수를 되돌려 다시 둘 수 있게 한다
+    const lastMove = omok.moves[omok.moves.length - 1];
+    if (lastMove && lastMove[2] === omok.human) { omok.moves.pop(); omok.board[lastMove[0]][lastMove[1]] = 0; }
+    omokStatus(`⚠ ${e.message || "서버에 연결하지 못했습니다"} — 다시 두세요`, "lose");
+    drawOmok();
+  }
+}
+
+function omokUndo() {
+  if (omok.thinking || omok.over) return;
+  // 내 마지막 수까지 되돌린다 (그 뒤의 AI 수 포함)
+  while (omok.moves.length) {
+    const [r, c, who] = omok.moves.pop();
+    omok.board[r][c] = 0;
+    if (who === omok.human) break;
+  }
+  omokStatus(`무르기 · 당신 차례입니다 (${omok.human === 1 ? "⚫ 흑" : "⚪ 백"})`);
+  drawOmok();
+}
+
+// 결과물 도구: 복사 · Markdown 저장 · Word 저장
+function addTools(b, a, markdown) {
+  const title = (markdown.match(/^#\s+(.+)$/m)?.[1] || a.name).replace(/\*\*/g, "").trim();
+  const bar = el("div", "tools");
+  const copy = el("button", "btn", "📋 복사");
+  copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(markdown); copy.textContent = "✓ 복사됨"; }
+    catch { copy.textContent = "복사 실패"; }
+    setTimeout(() => { copy.textContent = "📋 복사"; }, 1500);
+  };
+  const md = el("button", "btn", "⬇ Markdown");
+  md.onclick = () => save(new Blob([markdown], { type: "text/markdown;charset=utf-8" }), `${title}.md`);
+  const word = el("button", "btn", "⬇ Word");
+  word.onclick = async () => {
+    word.disabled = true; word.textContent = "만드는 중…";
+    try {
+      const res = await fetch("/api/export/docx", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ markdown, title }) });
+      if (!res.ok) throw new Error();
+      save(await res.blob(), `${title}.docx`);
+      word.textContent = "⬇ Word";
+    } catch { word.textContent = "저장 실패"; }
+    word.disabled = false;
+  };
+  bar.append(copy, md, word);
+  b.m.append(bar);
+}
+
+function save(blob, name) {
+  const a = el("a"); a.href = URL.createObjectURL(blob);
+  a.download = name.replace(/[\\/:*?"<>|]+/g, "_");
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// 답변: 마크다운 렌더링(라이브러리를 못 불러오면 일반 텍스트) + (p.N) 을 출처로 이동하는 배지로
+function renderAnswer(b, text) {
+  const a = b.ans;
+  if (window.marked && window.DOMPurify) {
+    a.className = "answer";
+    a.innerHTML = DOMPurify.sanitize(marked.parse(text));
+  } else {
+    a.className = "answer plain";
+    a.textContent = text;
+  }
+  const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) if (/\(p\.\s*\d+/.test(walker.currentNode.nodeValue)) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    const s = node.nodeValue;
+    for (const m of s.matchAll(/\(((?:p\.\s*\d+(?:\s*[,~\-–]\s*(?:p\.\s*)?\d+)*))\)/g)) {
+      frag.append(s.slice(last, m.index));
+      for (const n of m[1].match(/\d+/g)) {
+        const c = el("a", "cite", `p.${n}`);
+        c.onclick = () => jumpToSource(b, n);
+        frag.append(c);
+      }
+      last = m.index + m[0].length;
+    }
+    frag.append(s.slice(last));
+    node.replaceWith(frag);
+  }
+}
+
+function jumpToSource(b, page) {
+  const card = b.m.querySelector(`.src[data-page="${page}"]`);
+  if (!card) return;
+  card.closest("details").open = true;
+  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  card.classList.add("flash");
+  setTimeout(() => card.classList.remove("flash"), 1200);
+}
+
+function renderSources(b, docId, sources) {
+  if (!sources.length) return;
+  const box = el("details", "srcbox");
+  box.append(el("summary", null, `출처 ${sources.length}곳 · ` + sources.map(s => `p.${s.page}`).join(", ")));
+  box.append(el("div", "srcnote", sources[0].cited
+    ? "답변에 표시된 페이지와 근거 원문입니다. 이미지를 누르면 크게 봅니다."
+    : "답변에 페이지 표시가 없어, 검색에서 읽은 페이지를 보여줍니다."));
+  const list = el("div", "sources");
+  for (const s of sources) {
+    const card = el("div", "src" + (s.image ? "" : " noimg"));
+    card.dataset.page = s.page;
+    if (s.image) {
+      const url = `/api/page-image/${docId}/${s.page}`;
+      const link = el("a"); link.href = `${url}?dpi=200`; link.target = "_blank"; link.rel = "noopener";
+      const img = el("img"); img.loading = "lazy"; img.src = url; img.alt = `${s.page}페이지`;
+      link.append(img); card.append(link);
+    }
+    const body = el("div");
+    const head = el("div", "head", s.image ? `p.${s.page} ` : `p.${s.page} (텍스트 구간 ${s.page}) `);
+    if (s.section) head.append(el("span", null, `· ${s.section}`));
+    body.append(head, el("div", "snip", s.snippet));
+    card.append(body);
+    list.append(card);
+  }
+  box.append(list);
+  b.m.append(box);
+}
+
+// ── 입력창: 자동 높이, Enter 전송 (한글 조합 중 Enter 는 무시) ──
+function autosize() { const q = $("q"); q.style.height = "auto"; q.style.height = Math.min(q.scrollHeight, 200) + "px"; updateSend(); }
+$("q").addEventListener("input", autosize);
+$("q").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+  e.preventDefault();
+  if (!busy) send();
+});
+$("send").onclick = send;
+
+(async () => {
+  agents = await (await fetch("/api/agents")).json();
+  try { ({ agents: market, categories: marketCats } = await (await fetch("/api/market")).json()); } catch { market = []; }
+  await loadApps();
+  await loadDocs();
+  route();
+  updateSend();
+  loadStatus();
+  setInterval(() => renderRecent(), 60_000);  // '3분 전' 같은 시간 표시 갱신
+})();
 </script>
 </body>
 </html>

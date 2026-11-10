@@ -59,26 +59,22 @@ def test_chunk_context(indexed_doc):
     assert "1,234억" in out and "512명" in out
 
 
-def test_ocr_pages_uses_vision_model(sample_pdf, monkeypatch):
-    """비전 모델을 가짜로 바꿔 OCR 결과 저장 흐름만 검증 (API 호출 없음)."""
-
-    class FakeModel:
-        def invoke(self, messages):
-            blocks = messages[0].content
-            assert blocks[0]["type"] == "image" and blocks[0]["base64"]
-            return type("R", (), {"text": "# 스캔 페이지\n매출 목표는 2,000억 원입니다."})()
-
-    monkeypatch.setattr(tools, "_ocr_model", lambda: FakeModel())
-    doc_id = store.doc_id_for(sample_pdf)
-    tools.inspect_pdf.invoke({"pdf_path": str(sample_pdf)})
-    out = tools.ocr_pages.invoke({"doc_id": doc_id, "pages": "2"})
-    assert "p.2: OCR" in out
-    assert store.load_page(doc_id, 2)["source"] == "ocr"
-
-
 def test_build_agent(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
     monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")
     from rag.agent import build_agent
 
     assert build_agent() is not None
+
+
+def test_openai_compatible_model_disables_streaming_by_default(monkeypatch):
+    from rag.llm import make_model
+
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")
+    monkeypatch.delenv("LLM_STREAMING", raising=False)
+    assert make_model("some-model").disable_streaming is True  # vLLM 스트리밍 글자 누락 회피
+    monkeypatch.setenv("LLM_STREAMING", "1")
+    monkeypatch.setenv("LLM_TEMPERATURE", "0.2")
+    m = make_model("some-model")
+    assert m.disable_streaming is False and m.temperature == 0.2
