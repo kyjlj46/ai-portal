@@ -180,6 +180,7 @@ class AgentSpec:
     run: str = "auto"  # 커스텀 앱 실행 방식 — pipeline: 담은 순서대로 코드가 실행, auto: 총괄 에이전트가 판단(DeepAgent)
     output: str = "all"  # pipeline 결과 — all: 모든 단계, last: 마지막 단계 (중간 결과는 접어 둠)
     instructions: str = ""  # 커스텀 앱 지시사항 (pipeline 단계마다 전달)
+    extra_tools: list[str] = field(default_factory=list)  # 마켓 Agent 전용 도구 이름 (extra_tools.TOOLS)
     request_label: str = "요청"
     intro: str = ""
     fields: list[dict] = field(default_factory=list)

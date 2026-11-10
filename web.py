@@ -40,24 +40,93 @@ def index():
     return FileResponse(ROOT / "static" / "index.html")
 
 
+TEMP_MAX_AGE = 24 * 3600  # 임시 문서는 하루 뒤 정리
+
+
+def temp_dir() -> Path:
+    return UPLOAD_DIR / "tmp"
+
+
+def is_temp(path: str | Path) -> bool:
+    try:
+        Path(path).resolve().relative_to(temp_dir().resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _remove_temp(path: Path) -> None:
+    """임시 문서 파일과 그 인덱스를 지운다. 같은 내용의 문서가 문서함에도 있으면 인덱스는 그대로 둔다."""
+    import shutil
+
+    try:
+        doc_id = store.doc_id_for(path)
+    except OSError:
+        doc_id = None
+    if doc_id:
+        try:
+            if is_temp(store.load_meta(doc_id)["path"]):
+                shutil.rmtree(store.doc_dir(doc_id), ignore_errors=True)
+        except ValueError:
+            pass
+    path.unlink(missing_ok=True)
+
+
+def cleanup_temp(max_age: float = TEMP_MAX_AGE) -> int:
+    import time
+
+    if not temp_dir().exists():
+        return 0
+    old = [p for p in temp_dir().iterdir() if p.is_file() and time.time() - p.stat().st_mtime > max_age]
+    for p in old:
+        _remove_temp(p)
+    return len(old)
+
+
 @app.post("/api/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(file: UploadFile = File(...), temp: bool = False):
+    """문서를 올린다. temp=true 면 이번 작업에만 쓰는 임시 문서 (문서함 목록에 안 보이고 하루 뒤 지워짐)."""
     if Path(file.filename or "").suffix.lower() not in SUPPORTED_EXTS:
         raise HTTPException(400, f"지원하지 않는 형식입니다. 지원: {', '.join(sorted(SUPPORTED_EXTS))}")
-    UPLOAD_DIR.mkdir(exist_ok=True)
     safe = re.sub(r"[^\w.\-가-힣]", "_", Path(file.filename).name)
-    dest = UPLOAD_DIR / safe
+    if temp:
+        import secrets
+
+        cleanup_temp()
+        temp_dir().mkdir(parents=True, exist_ok=True)
+        dest = temp_dir() / f"{secrets.token_hex(3)}_{safe}"  # 같은 이름의 임시 문서끼리 덮어쓰지 않게
+    else:
+        UPLOAD_DIR.mkdir(exist_ok=True)
+        dest = UPLOAD_DIR / safe
     dest.write_bytes(await file.read())
     doc_id = store.doc_id_for(dest)
     indexed = bool(store.load_chunks(doc_id))
-    return {"pdf_path": str(dest), "filename": safe, "doc_id": doc_id, "indexed": indexed}
+    return {"pdf_path": str(dest), "filename": safe, "doc_id": doc_id, "indexed": indexed,
+            "temp": temp, "label": store.label_for(doc_id)}
+
+
+class TempDocRequest(BaseModel):
+    pdf_path: str
+
+
+@app.delete("/api/documents/temp")
+def delete_temp_document(req: TempDocRequest):
+    """임시 문서를 바로 지운다 (문서함 문서는 지울 수 없다)."""
+    path = Path(req.pdf_path)
+    if not is_temp(path):
+        raise HTTPException(400, "임시 문서만 지울 수 있습니다.")
+    _remove_temp(path)
+    return {"ok": True}
 
 
 @app.get("/api/documents")
 def documents():
+    """문서함 목록 (임시 문서 제외)."""
     out = []
     for d in store.list_doc_ids():
         meta = store.load_meta(d)
+        if is_temp(meta["path"]):
+            continue
         out.append(
             {
                 "doc_id": d,
@@ -68,6 +137,7 @@ def documents():
                 "chunks": len(store.load_chunks(d)),
                 "kind": meta.get("kind", "pdf"),
                 "unit": meta.get("unit", "page"),
+                "label": store.label_for(d),
             }
         )
     return out
@@ -131,7 +201,7 @@ def delete_conversation(conv_id: str):
     return {"ok": True}
 
 
-def _sse(path: str | None, question: str, conversation_id: str | None, agent_id: str = "qa") -> StreamingResponse:
+def _sse(path: str | list[str] | None, question: str, conversation_id: str | None, agent_id: str = "qa") -> StreamingResponse:
     from rag.stream import ask_stream, conversation
 
     history = conversation(f"{agent_id}:{conversation_id}") if conversation_id else None
@@ -157,6 +227,7 @@ def ask_stream_api(req: AskRequest):
 
 class RunRequest(BaseModel):
     pdf_path: str | None = None  # 보고서/기안은 참고 문서 없이도 실행
+    pdf_paths: list[str] | None = None  # 여러 문서를 함께 (최대 5개)
     question: str | None = None  # 자유 입력 (수정 요청, Q&A 질문)
     inputs: dict | None = None  # 양식 입력 → 요청문으로 바꿈
     conversation_id: str | None = None
@@ -170,12 +241,41 @@ def status():
     from rag.image_agent import vision_enabled
     from rag.llm import default_model_name, llm_streaming
 
+    from rag.mailer import public_status
+
     return {
         "model": os.getenv("RAG_MODEL") or default_model_name(),
         "vision": os.getenv("VISION_MODEL") if vision_enabled() else None,
         "streaming": llm_streaming(),
         "configured": check_config() is None,
+        "email": public_status(),
     }
+
+
+class EmailRequest(BaseModel):
+    to: str | list[str]
+    cc: str | list[str] = ""
+    subject: str
+    text: str
+    html: str | None = None
+    confirm: bool = False  # 화면에서 사용자가 '확인하고 보내기' 를 눌렀을 때만 True
+
+
+@app.post("/api/email/send")
+def send_email(req: EmailRequest):
+    """사용자가 확인한 메일 초안을 SMTP 로 보낸다. 에이전트가 이 API 를 부르는 경로는 없다."""
+    from rag import mailer
+
+    if not req.confirm:
+        raise HTTPException(400, "보내기 전에 받는 사람과 내용을 확인해 주세요.")
+    try:
+        return mailer.send(req.to, req.subject, req.text, cc=req.cc, html=req.html)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    except RuntimeError as e:
+        raise HTTPException(503, str(e)) from None
+    except OSError as e:  # 연결 실패, 인증 실패 등 (smtplib.SMTPException 도 OSError)
+        raise HTTPException(502, f"메일 서버 오류: {type(e).__name__}: {e}") from None
 
 
 @app.get("/api/market")
@@ -184,6 +284,90 @@ def market():
     from rag import market as m
 
     return {"categories": m.CATEGORIES, "agents": m.public()}
+
+
+class AgentDesignRequest(BaseModel):
+    request: str = ""  # 만들고 싶은 Agent 설명
+    feedback: str = ""  # 고칠 점 (다시 설계할 때)
+    current: dict | None = None  # 지금 설계 (다시 설계할 때)
+
+
+class CustomAgentRequest(BaseModel):
+    name: str
+    icon: str = "🤖"
+    category: str = "업무"
+    description: str = ""
+    role: str
+    instructions: str
+    examples: list[str] = []
+    uses_doc: bool = False
+    tools: list[str] = []
+    on_upload: str = ""
+
+
+@app.post("/api/custom-agents/design")
+def design_agent(req: AgentDesignRequest):
+    """gpt-oss 로 Agent 를 설계한다 (저장하지 않음 — 화면에서 확인·수정 후 저장)."""
+    from rag import custom_agents
+
+    if err := check_config():
+        raise HTTPException(500, err)
+    try:
+        return custom_agents.design(req.request, req.feedback, req.current)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+@app.get("/api/custom-agents")
+def list_custom_agents():
+    from rag import custom_agents
+
+    return custom_agents.list_all()
+
+
+@app.get("/api/custom-agents/{agent_id}")
+def get_custom_agent(agent_id: str):
+    from rag import custom_agents
+
+    try:
+        return custom_agents.get(agent_id)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from None
+
+
+@app.post("/api/custom-agents")
+def create_custom_agent(req: CustomAgentRequest):
+    from rag import custom_agents
+
+    try:
+        return custom_agents.save(req.model_dump())
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+@app.put("/api/custom-agents/{agent_id}")
+def update_custom_agent(agent_id: str, req: CustomAgentRequest):
+    from rag import custom_agents
+
+    try:
+        return custom_agents.save(req.model_dump(), agent_id)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+@app.delete("/api/custom-agents/{agent_id}")
+def delete_custom_agent(agent_id: str):
+    from rag import custom_agents
+
+    try:
+        custom_agents.delete(agent_id)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from None
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
+    return {"ok": True}
 
 
 class AppRequest(BaseModel):
@@ -268,9 +452,17 @@ def agent_stream(agent_id: str, req: RunRequest):
         raise HTTPException(400, f"{spec.name}은(는) /api/omok/move 로 둡니다.")
     if spec.mode == "image":
         return _image_sse(req)
-    if req.pdf_path and not Path(req.pdf_path).exists():
-        raise HTTPException(404, f"파일 없음: {req.pdf_path}")
-    if spec.doc == "required" and not req.pdf_path:
+    from rag.multidoc import MAX_DOCS
+
+    paths = list(dict.fromkeys(req.pdf_paths or ([req.pdf_path] if req.pdf_path else [])))
+    if spec.doc == "none":
+        paths = []
+    if len(paths) > MAX_DOCS:
+        raise HTTPException(400, f"문서는 한 번에 {MAX_DOCS}개까지 고를 수 있습니다.")
+    for p in paths:
+        if not Path(p).exists():
+            raise HTTPException(404, f"파일 없음: {p}")
+    if spec.doc == "required" and not paths:
         raise HTTPException(400, f"{spec.name}은(는) 문서가 필요합니다. 위에서 문서를 고르거나 올려 주세요.")
     try:
         question = compose(agent_id, req.inputs) if req.inputs else (req.question or "").strip()
@@ -280,7 +472,7 @@ def agent_stream(agent_id: str, req: RunRequest):
         raise HTTPException(400, "요청 내용을 입력하세요.")
     if err := check_config():
         raise HTTPException(500, err)
-    return _sse(req.pdf_path or None, question, req.conversation_id, agent_id)
+    return _sse(paths[0] if len(paths) == 1 else (paths or None), question, req.conversation_id, agent_id)
 
 
 def _image_sse(req: RunRequest) -> StreamingResponse:
@@ -383,6 +575,7 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.getenv("PORT", "8000"))
+    cleanup_temp()  # 하루 지난 임시 문서 정리
     if not os.getenv("NO_BROWSER"):
         threading.Timer(1.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
     uvicorn.run(app, host="127.0.0.1", port=port)

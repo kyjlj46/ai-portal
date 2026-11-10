@@ -6,6 +6,7 @@
 - PDF            : 그대로 페이지 OCR
 - Word / 한글     : Word·한컴오피스로 PDF 변환 후 페이지 OCR. 변환이 안 되면 텍스트를 직접 추출
 - 텍스트(.txt 등) : 변환/OCR 없이 읽어서 구간으로 나눔
+- 이미지(.png 등)  : PDF 로 바꿔 페이지 OCR (스캔본·사진)
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Callable
 import pymupdf as fitz
 
 from . import store
-from .convert import extract_segments, kind_of, to_pdf
+from .convert import extract_segments, image_to_pdf, kind_of, to_pdf
 from .ocr import ocr_page
 from .tools import chunk_document
 
@@ -51,7 +52,10 @@ def ingest(
 
     store.clear_pages(doc_id)
     pdf = path if kind == "pdf" else None
-    if kind in ("word", "ppt", "hwp"):
+    if kind == "image":
+        log(f"{Path(path).name}: 이미지를 PDF 로 변환 중…")
+        pdf = image_to_pdf(path, store.doc_dir(doc_id) / "converted.pdf")
+    elif kind in ("word", "ppt", "hwp"):
         log(f"{Path(path).name}: PDF 로 변환 중…")
         pdf = to_pdf(path, store.doc_dir(doc_id) / "converted.pdf")
         log("PDF 변환 완료" if pdf else "PDF 변환 불가 → 텍스트 직접 추출")

@@ -10,6 +10,8 @@ data/<doc_id>/
 from __future__ import annotations
 
 import hashlib
+import re
+import threading
 import json
 from pathlib import Path
 
@@ -93,3 +95,39 @@ def list_doc_ids() -> list[str]:
     if not DATA_DIR.exists():
         return []
     return sorted(p.name for p in DATA_DIR.iterdir() if (p / "meta.json").exists())
+
+
+# ─────────────────────────── 문서 표시(D1, D2 …) ───────────────────────────
+# 여러 문서를 함께 쓸 때 출처를 (D1 p.3) 처럼 구분하려고 문서마다 고정 표시를 붙인다 (data/labels.json).
+
+_label_lock = threading.Lock()
+
+
+def _labels_path() -> Path:
+    return DATA_DIR / "labels.json"
+
+
+def labels() -> dict[str, str]:
+    """doc_id → 표시."""
+    path = _labels_path()
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def label_for(doc_id: str) -> str:
+    with _label_lock:
+        table = labels()
+        if doc_id not in table:
+            used = [int(v[1:]) for v in table.values() if re.fullmatch(r"D\d+", v)]
+            table[doc_id] = f"D{max(used, default=0) + 1}"
+            _write(_labels_path(), table)
+        return table[doc_id]
+
+
+def resolve(ref: str) -> str:
+    """표시(D3) 또는 doc_id → doc_id."""
+    ref = (ref or "").strip()
+    if re.fullmatch(r"D\d+", ref):
+        for doc_id, label in labels().items():
+            if label == ref:
+                return doc_id
+    return ref

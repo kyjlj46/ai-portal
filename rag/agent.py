@@ -76,9 +76,11 @@ def build_agent(agent_id: str = "qa"):
             },
         ]
 
+    from .market import extra_tools
+
     return create_deep_agent(
         model=main_model,
-        tools=DOC_TOOLS,
+        tools=DOC_TOOLS + extra_tools(spec.extra_tools),
         system_prompt=spec.prompt or MAIN_PROMPT,
         subagents=subagents,
     )
@@ -87,10 +89,20 @@ def build_agent(agent_id: str = "qa"):
 FOLLOWUP = "지금까지 찾은 근거만으로 사용자 질문에 대한 최종 답변을 작성하세요. 각 항목에 (p.N) 출처를 붙이세요."
 
 
+_TOOL_STUB = re.compile(r"\[?\s*[a-z][a-z_]{2,}(?:\s*\(.*\)|(?:\s+[\w-]+\s*=\s*\S+)+)\s*\]?", re.S)
+
+
+def is_tool_stub(text: str) -> bool:
+    """도구를 실제로 부르지 않고 '[read_page page=2]' 처럼 호출 흉내만 글로 쓴 응답인지."""
+    return len(text) < 160 and bool(_TOOL_STUB.fullmatch(text.strip()))
+
+
 def final_answer(messages: list, followup: str = FOLLOWUP) -> str:
-    """마지막 AI 메시지의 본문. 모델이 본문 없이 끝냈으면 한 번 더 최종 답변을 요청한다."""
+    """마지막 AI 메시지의 본문. 모델이 본문 없이 끝냈거나 도구 호출 흉내만 남겼으면 한 번 더 최종 답변을 요청한다."""
     for msg in reversed(messages):
         if isinstance(msg, AIMessage) and not msg.tool_calls and msg.text.strip():
+            if is_tool_stub(msg.text):
+                break
             return normalize_citations(msg.text.strip())
         if isinstance(msg, HumanMessage):
             break

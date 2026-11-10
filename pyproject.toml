@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "deepagents 기반 PDF RAG (파싱/OCR/청킹/검색 서브에이전트)"
 requires-python = ">=3.12"
 dependencies = [
+    "ddgs>=9.16.1",
     "deepagents>=0.7.34",
     "fastapi>=0.162.2",
     "langchain-anthropic>=1.7.10",

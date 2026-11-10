@@ -278,8 +278,10 @@ def test_status_has_model_but_no_secrets(client, monkeypatch):
     monkeypatch.setenv("OPENAI_MODEL", "my-model")
     monkeypatch.delenv("RAG_MODEL", raising=False)
     monkeypatch.delenv("VISION_MODEL", raising=False)
+    monkeypatch.delenv("SMTP_HOST", raising=False)
     res = client.get("/api/status")
-    assert res.json() == {"model": "my-model", "vision": None, "streaming": False, "configured": True}
+    assert res.json() == {"model": "my-model", "vision": None, "streaming": False, "configured": True,
+                          "email": {"enabled": False, "sender": ""}}
     assert "sk-secret" not in res.text and "10.0.0.5" not in res.text
 
 

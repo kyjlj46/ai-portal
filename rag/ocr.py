@@ -22,9 +22,11 @@ from .llm import make_model
 _engine_lock = threading.Lock()
 
 
-@lru_cache(maxsize=1)
-def _engine():
+@lru_cache(maxsize=2)
+def _engine(unclip: float | None = None):
     from rapidocr import LangRec, ModelType, OCRVersion, RapidOCR
+
+    extra = {"Det.unclip_ratio": unclip} if unclip else None
 
     return RapidOCR(
         params={
@@ -35,8 +37,15 @@ def _engine():
             # 연한 글씨/작은 글씨까지 잡도록 탐지 문턱을 낮춤
             "Det.thresh": 0.2,
             "Det.box_thresh": 0.3,
+            **(extra or {}),
         }
     )
+
+
+def _tight_engine():
+    """글자 상자를 덜 넓히는 두 번째 검출기. 줄 간격이 좁으면 기본 검출기가 넓힌 상자끼리 겹쳐 한 줄을 통째로 놓치는데,
+    이 검출기는 그 줄을 잡는다 (대신 글자 가장자리가 잘릴 수 있어 기본 결과를 대신하지 않고 빈 곳만 채운다)."""
+    return _engine(unclip=1.1)
 
 
 def render_page(pdf_path: str, page: int, dpi: int = 200) -> bytes:
@@ -50,10 +59,7 @@ def text_layer(pdf_path: str, page: int) -> str:
         return pdf[page - 1].get_text("text", sort=True).strip()
 
 
-def detect_boxes(png: bytes) -> list[dict]:
-    """이미지에서 글자 상자 목록을 돌려준다: {x0, y0, x1, y1, text, score}."""
-    with _engine_lock:  # onnx 세션을 여러 스레드가 동시에 초기화하지 않도록
-        result = _engine()(png)
+def _boxes(result) -> list[dict]:
     if result.boxes is None:
         return []
     boxes = []
@@ -64,6 +70,37 @@ def detect_boxes(png: bytes) -> list[dict]:
             boxes.append(
                 {"x0": min(xs), "y0": min(ys), "x1": max(xs), "y1": max(ys), "text": text.strip(), "score": float(score)}
             )
+    return boxes
+
+
+def _covered(b: dict, others: list[dict], ratio: float = 0.3) -> bool:
+    area = max(1.0, (b["x1"] - b["x0"]) * (b["y1"] - b["y0"]))
+    for o in others:
+        ix = min(b["x1"], o["x1"]) - max(b["x0"], o["x0"])
+        iy = min(b["y1"], o["y1"]) - max(b["y0"], o["y0"])
+        if ix > 0 and iy > 0 and ix * iy >= ratio * area:
+            return True
+    return False
+
+
+def merge_missing(base: list[dict], extra: list[dict], min_score: float = 0.8) -> list[dict]:
+    """두 번째 검출 결과 중 기본 결과가 덮지 않는 자리의 상자만 보탠다 (잡음: 낮은 신뢰도, 글자 2개 미만은 버림)."""
+    added = [
+        b for b in extra
+        if b["score"] >= min_score and len(re.findall(r"[0-9A-Za-z가-힣]", b["text"])) >= 2 and not _covered(b, base)
+    ]
+    return base + added
+
+
+def detect_boxes(png: bytes) -> list[dict]:
+    """이미지에서 글자 상자 목록을 돌려준다: {x0, y0, x1, y1, text, score}.
+
+    기본 검출 + (OCR_SECOND_PASS, 기본 켬) 촘촘한 두 번째 검출로 기본 검출이 놓친 줄을 채운다.
+    """
+    with _engine_lock:  # onnx 세션을 여러 스레드가 동시에 초기화하지 않도록
+        boxes = _boxes(_engine()(png))
+        if os.getenv("OCR_SECOND_PASS", "1") != "0":
+            boxes = merge_missing(boxes, _boxes(_tight_engine()(png)))
     return boxes
 
 

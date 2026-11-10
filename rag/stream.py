@@ -98,24 +98,51 @@ def _ingest_events(path: str) -> Iterator[dict]:
             break
 
 
+def _ref(s: dict) -> str:
+    return f"{s['label']} p.{s['page']}" if s.get("label") else f"p.{s['page']}"
+
+
+def _public_docs(multi: list | None) -> list:
+    return [{k: d[k] for k in ("label", "doc_id", "filename", "page_count")} for d in multi] if multi else []
+
+
+def add_web_sources(answer: str, messages: list) -> str:
+    """웹에서 실제로 읽은 페이지(fetch_url 결과)를 출처 목록으로 붙인다. 답에 이미 링크가 있으면 그대로 둔다."""
+    pages: dict[str, str] = {}
+    for m in messages:
+        if isinstance(m, ToolMessage) and m.name == "fetch_url":
+            if found := re.match(r"\[(.*?)\] (https?://\S+)", m.text):
+                pages.setdefault(found.group(2), found.group(1).strip() or found.group(2))
+    if not pages or re.search(r"https?://", answer):
+        return answer
+    lines = [f"{i}. [{title.replace(']', ')')}]({url})" for i, (url, title) in enumerate(pages.items(), 1)]
+    return answer.rstrip() + "\n\n## 출처 (읽은 페이지)\n" + "\n".join(lines)
+
+
 STEP_RULE = (
     "[당신의 차례] 이 앱의 {i}/{n} 단계 '{name}' 담당입니다. 위 요청과 앞 단계 결과를 바탕으로 당신의 일만 하세요. "
     "요청 전체를 혼자 끝내려 하지 마세요. 다음 단계({rest})가 할 일은 하지 않습니다. 결과만 마크다운으로 출력합니다."
 )
 
 
-def _pipeline(spec, doc_id: str | None, question: str, history: list | None, steps: list) -> Iterator[dict]:
+def _pipeline(spec, doc_id: str | None, question: str, history: list | None, steps: list, multi: list | None = None) -> Iterator[dict]:
     """커스텀 앱 '순서대로' 실행: 담은 순서대로 마켓 에이전트를 하나씩 돌리고 앞 단계 결과를 다음 단계에 넘긴다.
 
     총괄 에이전트의 판단에 맡기지 않으므로 단계가 빠지거나 결과에 없는 내용이 덧붙지 않는다.
+    multi 가 있으면 여러 문서를 함께 쓴다 (문서 표시 D1… 와 (D1 p.3) 출처).
     """
     from datetime import date
 
+    from . import multidoc
     from .agent import collect_sources, demote_headings, drop_invalid_citations, final_answer, normalize_citations, unwrap_prose_fences
     from .market import BY_ID
 
     n = len(spec.subagents)
-    base = f"doc_id: {doc_id or '없음'}\n오늘: {date.today():%Y-%m-%d}\n요청: {question}"
+    today = f"{date.today():%Y-%m-%d}"
+    if multi:
+        base = multidoc.header(multi, today) + f"\n요청: {question}"
+    else:
+        base = f"doc_id: {doc_id or '없음'}\n오늘: {today}\n요청: {question}"
     prev = history[-1].content if history else ""  # 이어지는 요청이면 직전 결과를 고치게 한다
     outputs: list[tuple[str, str]] = []
     tool_msgs: list = []
@@ -128,7 +155,7 @@ def _pipeline(spec, doc_id: str | None, question: str, history: list | None, ste
             parts.append(f"[앱 지시사항]\n{spec.instructions}")
         if prev:
             parts.append(f"[직전 결과 — 위 요청이 수정 요청이면 이것을 바탕으로 고칩니다]\n{prev}")
-        if doc_id and m.uses_doc and not preloaded and (full := _preload(doc_id)):
+        if (doc_id or multi) and m.uses_doc and not preloaded and (full := multidoc.preload(multi) if multi else _preload(doc_id)):
             parts.append(full.strip())  # 짧은 문서는 처음 문서를 쓰는 단계에 전문을 준다
             preloaded = True
         parts += [f"[앞 단계 결과: {name}]\n{out}" for name, out in outputs]
@@ -144,7 +171,9 @@ def _pipeline(spec, doc_id: str | None, question: str, history: list | None, ste
             elif isinstance(msg, ToolMessage):
                 tool_msgs.append(msg)
         out = unwrap_prose_fences(normalize_citations(final_answer(msgs, "지금까지의 내용으로 당신 단계의 결과를 마크다운으로 끝까지 작성하세요.")))
-        if doc_id:
+        if multi:
+            out = multidoc.drop_invalid(multidoc.normalize(out), multi)
+        elif doc_id:
             out = drop_invalid_citations(out, store.load_meta(doc_id)["page_count"])
         outputs.append((f"{m.icon} {m.name}", out))
         steps.append({"agent": sid, "task": f"{i}/{n} 단계"})
@@ -157,13 +186,17 @@ def _pipeline(spec, doc_id: str | None, question: str, history: list | None, ste
         answer = f"{outputs[-1][1]}\n\n<details><summary>중간 단계 결과 보기 ({n - 1}개)</summary>\n\n{earlier}\n\n</details>"
     else:
         answer = "\n\n".join(f"## {name}\n\n{demote_headings(out)}" for name, out in outputs)
-    sources = collect_sources(tool_msgs, answer, doc_id) if doc_id else []
+    if multi:
+        sources = multidoc.sources(tool_msgs, answer, multi)
+    else:
+        sources = collect_sources(tool_msgs, answer, doc_id) if doc_id else []
     if history is not None:
         history.extend([HumanMessage(base), AIMessage(answer)])
         del history[: max(0, len(history) - 2 * MAX_TURNS)]
     if sources:
-        yield _step("answer", f"출처 {len(sources)}곳 정리: " + ", ".join(f"p.{s['page']}" for s in sources))
-    yield {"type": "final", "answer": answer, "sources": sources, "steps": steps, "doc_id": doc_id, "agent": spec.id}
+        yield _step("answer", f"출처 {len(sources)}곳 정리: " + ", ".join(_ref(s) for s in sources))
+    yield {"type": "final", "answer": answer, "sources": sources, "steps": steps, "doc_id": doc_id, "agent": spec.id,
+           "docs": _public_docs(multi)}
 
 
 PRELOAD_MAX_PAGES = 15
@@ -194,6 +227,20 @@ def _describe_call(name: str, args: dict, sub: bool) -> dict:
         return _step("read", f"p.{args.get('page', '?')} 전체 읽기", sub)
     if name == "document_outline":
         return _step("read", "문서 전체 구성 파악", sub)
+    if name == "chunk_stats":
+        return _step("read", "청킹 결과 통계 확인", sub)
+    if name == "preview_chunks":
+        return _step("read", f"청크 미리보기 ({args.get('start', 0)}번부터 {args.get('count', 5)}개)", sub)
+    if name == "chunk_document":
+        return _step("think", f"다시 청킹: 크기 {args.get('chunk_size', 800)}, 겹침 {args.get('chunk_overlap', 120)}", sub)
+    if name == "ocr_report":
+        return _step("read", "페이지별 OCR 결과·신뢰도 확인", sub)
+    if name == "reocr_pages":
+        return _step("think", f"다시 OCR: p.{args.get('pages', '?')} (dpi {args.get('dpi', 300)})", sub)
+    if name == "web_search":
+        return _step("search", f"웹 검색: “{args.get('query', '')}”", sub)
+    if name == "fetch_url":
+        return _step("read", f"페이지 읽기: {str(args.get('url', ''))[:90]}", sub)
     if name == "task":
         from .market import BY_ID
 
@@ -207,21 +254,32 @@ def _describe_call(name: str, args: dict, sub: bool) -> dict:
 def _describe_result(msg: ToolMessage, sub: bool) -> dict | None:
     text = msg.text
     if msg.name == "search_chunks":
-        pages = sorted({int(p) for p in re.findall(r"^\[\S+ p\.(\d+)", text, re.M)})
-        if not pages:
+        refs = re.findall(r"^\[\S+ (?:(D\d+) )?p\.(\d+)", text, re.M)  # 여러 문서면 '[청크ID D1 p.3 …'
+        if not refs:
             return _step("result", "→ 일치하는 근거 없음", sub)
-        hits = len(re.findall(r"^\[\S+ p\.\d+", text, re.M))
-        return _step("result", f"→ 근거 {hits}개 찾음 ({', '.join(f'p.{p}' for p in pages)})", sub)
+        found = sorted(set(refs), key=lambda r: (r[0], int(r[1])))
+        return _step("result", f"→ 근거 {len(refs)}개 찾음 ({', '.join(f'{lb} p.{p}'.strip() for lb, p in found)})", sub)
     if msg.name == "task":
         return _step("result", "→ 맡긴 작업의 결과를 받음", sub)
+    if msg.name == "web_search":
+        hits = len(re.findall(r"^\[\d+\] ", text, re.M))
+        return _step("result", f"→ 검색 결과 {hits}개" if hits else f"→ {text[:80]}", sub)
+    if msg.name == "fetch_url":
+        return _step("result", f"→ {len(text):,}자 읽음" if text.startswith(("[", "http")) else f"→ {text[:80]}", sub)
+    if msg.name in ("chunk_document", "reocr_pages"):
+        return _step("result", "→ " + text.strip().splitlines()[0][:100], sub)
     return None
 
 
-def ask_stream(path: str | None, question: str, history: list | None = None, agent_id: str = "qa") -> Iterator[dict]:
+def ask_stream(path: str | list[str] | None, question: str, history: list | None = None, agent_id: str = "qa") -> Iterator[dict]:
     """history 를 주면 이전 대화를 이어받고, 이번 턴의 메시지를 history 에 덧붙인다 (CLI 대화형).
 
     agent_id 로 catalog 의 에이전트를 고른다. path 가 None 이면 참고 문서 없이 실행한다 (보고서/기안).
+    path 에 문서 목록을 주면 여러 문서를 함께 쓴다 (문서 표시 D1… 와 (D1 p.3) 출처, rag.multidoc).
     """
+    from datetime import date
+
+    from . import multidoc
     from .agent import collect_sources, drop_invalid_citations, final_answer, normalize_citations
     from .catalog import get as get_spec
 
@@ -229,23 +287,31 @@ def ask_stream(path: str | None, question: str, history: list | None = None, age
         from .ingest import is_indexed
 
         spec = get_spec(agent_id)
-        doc_id = store.doc_id_for(path) if path else None
+        paths = [path] if isinstance(path, str) else list(dict.fromkeys(path or []))
+        doc_ids = list(dict.fromkeys(store.doc_id_for(p) for p in paths))
         steps: list[dict] = []
-        if doc_id and not is_indexed(doc_id):
-            for ev in _ingest_events(path):
-                yield ev
-            steps.append({"agent": "ingest", "task": "전체 페이지 OCR + LLM 정리 → 청킹/인덱싱"})
+        for p, d in zip(paths, doc_ids):
+            if not is_indexed(d):
+                for ev in _ingest_events(p):
+                    yield ev
+                steps.append({"agent": "ingest", "task": f"{Path(p).name}: 전체 페이지 OCR + LLM 정리 → 청킹/인덱싱"})
+        multi = multidoc.docs_of(doc_ids) if len(doc_ids) > 1 else None
+        doc_id = doc_ids[0] if len(doc_ids) == 1 else None
 
         if spec.subagents and spec.run == "pipeline":  # 커스텀 앱 '순서대로' 실행
-            yield from _pipeline(spec, doc_id, question, history, steps)
+            yield from _pipeline(spec, doc_id, question, history, steps, multi)
             return
 
-        prompt = f"doc_id: {doc_id or '없음'}\n{spec.request_label}: {question}"
-        if agent_id.startswith(("m:", "app:")):  # 마켓·커스텀 앱: 날짜를 지어내지 않도록 오늘 날짜를 준다
-            from datetime import date
-
-            prompt = f"doc_id: {doc_id or '없음'}\n오늘: {date.today():%Y-%m-%d}\n{spec.request_label}: {question}"
-        full = _preload(doc_id) if doc_id and spec.preload else ""
+        today = f"{date.today():%Y-%m-%d}" if agent_id.startswith(("m:", "app:")) else None  # 날짜를 지어내지 않도록
+        if multi:
+            prompt = multidoc.header(multi, today) + f"\n{spec.request_label}: {question}"
+            yield _step("read", "여러 문서를 함께 봅니다: " + ", ".join(f"{d['label']} {d['filename']}" for d in multi))
+        else:
+            prompt = f"doc_id: {doc_id or '없음'}\n" + (f"오늘: {today}\n" if today else "") + f"{spec.request_label}: {question}"
+        if multi:
+            full = multidoc.preload(multi) if spec.preload else ""
+        else:
+            full = _preload(doc_id) if doc_id and spec.preload else ""
         if full:
             yield _step("read", "문서 전문을 페이지별로 불러옴")
         main_msgs: list = [HumanMessage(prompt + full)]
@@ -302,8 +368,12 @@ def ask_stream(path: str | None, question: str, history: list | None = None, age
             from .agent import unwrap_prose_fences
 
             answer = unwrap_prose_fences(answer)
+            answer = add_web_sources(answer, tool_msgs + main_msgs)
         sources: list = []
-        if doc_id:
+        if multi:
+            answer = multidoc.drop_invalid(multidoc.normalize(answer), multi)
+            sources = multidoc.sources(tool_msgs + main_msgs, answer, multi)
+        elif doc_id:
             answer = drop_invalid_citations(answer, store.load_meta(doc_id)["page_count"])
             sources = collect_sources(tool_msgs + main_msgs, answer, doc_id)
         if history is not None:
@@ -312,7 +382,8 @@ def ask_stream(path: str | None, question: str, history: list | None = None, age
             history.extend([HumanMessage(prompt), AIMessage(normalize_citations(answer))])
             del history[: max(0, len(history) - 2 * MAX_TURNS)]
         if sources:
-            yield _step("answer", f"출처 {len(sources)}곳 정리: " + ", ".join(f"p.{s['page']}" for s in sources))
-        yield {"type": "final", "answer": normalize_citations(answer), "sources": sources, "steps": steps, "doc_id": doc_id, "agent": agent_id}
+            yield _step("answer", f"출처 {len(sources)}곳 정리: " + ", ".join(_ref(s) for s in sources))
+        yield {"type": "final", "answer": normalize_citations(answer), "sources": sources, "steps": steps, "doc_id": doc_id,
+               "agent": agent_id, "docs": _public_docs(multi)}
     except Exception as e:  # noqa: BLE001 - 화면에 오류를 보여주기 위함
         yield {"type": "error", "message": f"{type(e).__name__}: {e}"}

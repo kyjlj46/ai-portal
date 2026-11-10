@@ -108,11 +108,12 @@ def extract_text_layer(doc_id: str, pages: str = "all") -> str:
 
 @tool
 def read_page(doc_id: str, page: int) -> str:
-    """저장된 페이지 텍스트 전문을 읽는다 (추출/OCR 결과 검수용)."""
-    data = store.load_page(doc_id, page)
+    """저장된 페이지 텍스트 전문을 읽는다. doc_id 에는 문서 ID 또는 표시(D3)를 넣는다."""
+    label = doc_id.strip() if re.fullmatch(r"D\d+", doc_id.strip()) else ""
+    data = store.load_page(store.resolve(doc_id), page)
     if not data:
         return f"p.{page} 는 아직 추출되지 않았습니다."
-    return f"[p.{page} source={data['source']} quality={data['quality']}]\n{data['text']}"
+    return f"[{label + ' ' if label else ''}p.{page} source={data['source']} quality={data['quality']}]\n{data['text']}"
 
 
 # ─────────────────────────── 2. OCR (로컬 OCR + LLM 정리) ───────────────────────────
@@ -179,6 +180,7 @@ def chunk_document(doc_id: str, chunk_size: int = 800, chunk_overlap: int = 120)
                 }
             )
     store.save_chunks(doc_id, chunks)
+    store._write(store.doc_dir(doc_id) / "chunking.json", {"chunk_size": chunk_size, "chunk_overlap": chunk_overlap})
     _bm25_index.cache_clear()
 
     sizes = [len(c["text"]) for c in chunks] or [0]
@@ -224,8 +226,13 @@ def _bm25_index():
 def search_chunks(query: str, k: int = 5, doc_id: str = "") -> str:
     """BM25 키워드 검색으로 관련 청크 상위 k개를 반환한다.
 
+    doc_id: 문서 ID 또는 표시(D3). 여러 문서는 쉼표로 ('D1,D3'). 여러 문서면 결과 머리말에 표시가 붙는다.
     정확도를 위해 하나의 질문을 동의어/세부 키워드로 바꿔 여러 번 검색하는 것을 권장한다.
     """
+    refs = [r.strip() for r in (doc_id or "").split(",") if r.strip()]
+    allowed = {store.resolve(r) for r in refs}
+    show_label = len(refs) > 1 or any(re.fullmatch(r"D\d+", r) for r in refs)
+    names = store.labels() if show_label else {}
     chunks, bm25 = _bm25_index()
     if bm25 is None:
         return "인덱스가 비어 있습니다. 먼저 chunk_document 를 실행하세요."
@@ -234,11 +241,12 @@ def search_chunks(query: str, k: int = 5, doc_id: str = "") -> str:
     out = []
     for i in ranked:
         c = chunks[i]
-        if doc_id and c["doc_id"] != doc_id:
+        if allowed and c["doc_id"] not in allowed:
             continue
         if scores[i] <= 0:
             break
-        out.append(f"[{c['id']} p.{c['page']} §{c['section'] or '-'} score={scores[i]:.2f}]\n{c['text']}")
+        label = f"{names.get(c['doc_id'], '?')} " if show_label else ""
+        out.append(f"[{c['id']} {label}p.{c['page']} §{c['section'] or '-'} score={scores[i]:.2f}]\n{c['text']}")
         if len(out) >= k:
             break
     return "\n\n".join(out) or "일치하는 청크가 없습니다."
@@ -256,7 +264,8 @@ def get_chunk_context(chunk_id: str, window: int = 1) -> str:
 
 @tool
 def document_outline(doc_id: str) -> str:
-    """문서 전체 구성(페이지별 소제목과 첫 부분)을 보여준다. 요약/보고서처럼 문서 전체를 다룰 때 먼저 호출한다."""
+    """문서 전체 구성(페이지별 소제목과 첫 부분)을 보여준다. 요약/보고서처럼 문서 전체를 다룰 때 먼저 호출한다. doc_id 에 표시(D3)도 된다."""
+    doc_id = store.resolve(doc_id)
     try:
         meta = store.load_meta(doc_id)
     except ValueError:

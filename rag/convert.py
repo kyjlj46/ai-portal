@@ -24,7 +24,8 @@ WORD_EXTS = {".docx", ".doc", ".rtf", ".odt"}
 PPT_EXTS = {".pptx", ".ppt", ".odp"}
 HWP_EXTS = {".hwp", ".hwpx"}
 TEXT_EXTS = {".txt", ".md", ".markdown", ".csv", ".tsv", ".log", ".json"}
-SUPPORTED_EXTS = PDF_EXTS | WORD_EXTS | PPT_EXTS | HWP_EXTS | TEXT_EXTS
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}  # 스캔 이미지 → PDF 로 바꿔 OCR
+SUPPORTED_EXTS = PDF_EXTS | WORD_EXTS | PPT_EXTS | HWP_EXTS | TEXT_EXTS | IMAGE_EXTS
 
 CONVERT_TIMEOUT = 180  # 초
 SEGMENT_CHARS = 2500  # 텍스트 직접 추출 시 한 '구간'(가짜 페이지) 크기
@@ -42,7 +43,21 @@ def kind_of(path: str | Path) -> str:
         return "hwp"
     if ext in TEXT_EXTS:
         return "text"
+    if ext in IMAGE_EXTS:
+        return "image"
     raise ValueError(f"지원하지 않는 형식: {ext} (지원: {', '.join(sorted(SUPPORTED_EXTS))})")
+
+
+def image_to_pdf(src: str | Path, dst: str | Path) -> str:
+    """이미지(여러 장짜리 TIFF/GIF 포함)를 장마다 한 페이지인 PDF 로 만든다. 같은 OCR 파이프라인을 타게 하려는 것."""
+    from PIL import Image, ImageSequence
+
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(src) as im:
+        frames = [f.convert("RGB") for f in ImageSequence.Iterator(im)][:200]
+    frames[0].save(dst, "PDF", resolution=200.0, save_all=True, append_images=frames[1:])
+    return str(dst)
 
 
 # ─────────────────────────── 1. PDF 변환 (Word / PowerPoint / 한글 COM) ───────────────────────────
