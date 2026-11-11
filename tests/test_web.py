@@ -288,3 +288,14 @@ def test_status_has_model_but_no_secrets(client, monkeypatch):
 def test_agents_have_menu_groups(client):
     groups = {a["id"]: a["group"] for a in client.get("/api/agents").json()}
     assert groups["qa"] == groups["news"] == "문서 작업" and groups["image"] == "분석" and groups["omok"] == "쉬어가기"
+
+
+def test_upload_same_name_different_content_keeps_both(client):
+    """폴더째 올릴 때 하위 폴더에 같은 이름 문서가 있어도 덮어쓰지 않는다. 같은 내용이면 그대로 하나."""
+    first = client.post("/api/upload", files={"file": ("보고서.txt", "가".encode(), "text/plain")}).json()
+    again = client.post("/api/upload", files={"file": ("보고서.txt", "가".encode(), "text/plain")}).json()
+    other = client.post("/api/upload", files={"file": ("보고서.txt", "나".encode(), "text/plain")}).json()
+    third = client.post("/api/upload", files={"file": ("보고서.txt", "다".encode(), "text/plain")}).json()
+    assert first["filename"] == again["filename"] == "보고서.txt"
+    assert other["filename"] == "보고서 (2).txt" and third["filename"] == "보고서 (3).txt"
+    assert len({first["doc_id"], other["doc_id"], third["doc_id"]}) == 3

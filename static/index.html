@@ -37,6 +37,7 @@
   .nav-group { display: flex; flex-direction: column; gap: 2px; }
   .side-h { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 8px 2px;
             font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+  .side-acts { display: inline-flex; gap: 4px; align-items: center; }
   .side-h button { font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 0 2px; }
   .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; color: var(--text);
               text-decoration: none; font-size: 14px; white-space: nowrap; }
@@ -217,7 +218,7 @@
   .dp-list label .m { display: block; font-size: 11px; color: var(--muted); }
   .dp-list label .x { font: inherit; font-size: 12px; border: 0; background: none; color: var(--muted); cursor: pointer; }
   .dp-list .none { font-size: 13px; color: var(--muted); padding: 8px 4px; }
-  .dp-acts { display: flex; flex-wrap: wrap; gap: 6px; } .dp-acts .btn { flex: 1; font-size: 13px; }
+  .dp-acts { display: flex; flex-wrap: wrap; gap: 6px; } .dp-acts .btn { flex: 1; font-size: 13px; white-space: nowrap; }
   .dp-foot { display: flex; justify-content: space-between; align-items: center; }
   .linkbtn { font: inherit; font-size: 12px; border: 0; background: none; color: var(--muted); text-decoration: underline; cursor: pointer; }
   .btn { font: inherit; font-size: 14px; background: var(--bg); color: var(--text); border: 1px solid var(--line);
@@ -323,6 +324,42 @@
   .cite { display: inline-block; font-size: 12px; line-height: 1.5; padding: 0 6px; margin: 0 1px;
           border-radius: 9px; background: var(--accent); color: var(--accent-text); cursor: pointer;
           text-decoration: none; white-space: nowrap; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; max-width: min(560px, calc(100vw - 32px));
+           background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 10px; font-size: 13.5px; box-shadow: var(--shadow); }
+  .toast[hidden] { display: none; }
+  /* 질의자 확인 (HITL): 에이전트가 판단이 필요해 되묻는 질문 */
+  .askbox { border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 10px; padding: 12px 14px;
+            background: color-mix(in srgb, var(--accent) 7%, var(--card)); display: grid; gap: 8px; }
+  .askbox .ask-h { font-size: 13px; color: var(--accent); font-weight: 600; }
+  .askbox .ask-q { font-size: 15px; font-weight: 600; white-space: pre-wrap; }
+  .askbox .ask-why { font-size: 13px; color: var(--muted); }
+  .askbox .ask-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .askbox .ask-opts .btn { font-size: 13.5px; padding: 5px 12px; }
+  .askbox .ask-opts .btn.skip { color: var(--muted); border-style: dashed; }
+  .askbox .ask-hint { font-size: 12px; color: var(--muted); }
+  .askbox.done { opacity: .7; } .askbox.done .ask-opts, .askbox.done .ask-hint { display: none; }
+  .askbox .ask-a { font-size: 13px; color: var(--muted); } .askbox .ask-a b { color: var(--text); }
+  /* 처리 흐름: 답변 끝에 어떤 Agent 를 어떤 순서로 썼는지 */
+  .flowbox { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 13px; }
+  .flowbox > summary { padding: 8px 12px; cursor: pointer; color: var(--muted); list-style: none; display: flex; gap: 6px; align-items: center; }
+  .flowbox > summary::-webkit-details-marker { display: none; }
+  .flowbox > summary::before { content: "▸"; transition: transform .15s; }
+  .flowbox[open] > summary::before { transform: rotate(90deg); }
+  .flowbox > summary b { color: var(--text); font-weight: 600; }
+  .aflow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 12px 12px; margin: 0; list-style: none; }
+  .aflow > li { display: contents; }
+  .aflow .arrow { color: var(--muted); font-size: 14px; }
+  .aflow .stage { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .aflow .stage.par { border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; padding: 4px 6px 4px 4px; }
+  .aflow .stage.par::before { content: "동시"; font-size: 11px; color: var(--accent); padding: 0 2px 0 4px; }
+  .aflow .chip { display: inline-flex; gap: 5px; align-items: baseline; padding: 4px 9px; border-radius: 8px;
+                background: var(--card); border: 1px solid var(--line); white-space: nowrap; }
+  .aflow .chip .no { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .aflow .chip .n { font-weight: 600; color: var(--text); }
+  .aflow .chip .d { font-size: 11.5px; color: var(--muted); white-space: normal; }
+  .aflow .chip.fail { border-color: var(--warn); } .aflow .chip.fail .n { color: var(--warn); text-decoration: line-through; }
+  .aflow .chip.warn { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+  .aflow .chip.ask { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
   .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
   .tools .btn { font-size: 13px; padding: 4px 10px; }
 
@@ -432,7 +469,7 @@
   <div class="side-scroll">
     <nav class="nav-group" id="nav" aria-label="에이전트"></nav>
     <section class="side-sec" aria-labelledby="docsH">
-      <div class="side-h"><span id="docsH">문서</span><button id="sideUpload" title="PDF · Word · PowerPoint · 한글 · 텍스트">＋ 올리기</button></div>
+      <div class="side-h"><span id="docsH">문서</span><span class="side-acts"><button id="sideUpload" title="PDF · Word · PowerPoint · 한글 · 텍스트 (여러 개 선택 가능)">＋ 올리기</button><button id="sideFolder" title="폴더째 올리기 (하위 폴더 포함)" aria-label="폴더 올리기">📁</button></span></div>
       <ul class="side-list" id="sideDocs"></ul>
     </section>
     <section class="side-sec" aria-labelledby="recentH">
@@ -457,18 +494,20 @@
       <input class="mk-search" id="dpSearch" type="search" placeholder="문서 검색" aria-label="문서 검색">
       <ul class="dp-list" id="dpList"></ul>
       <div class="dp-acts">
-        <button class="btn" id="dpUpload" title="문서함에 저장해 두고 계속 씁니다">📎 문서함에 올리기</button>
+        <button class="btn" id="dpUpload" title="문서함에 저장해 두고 계속 씁니다 (여러 개 선택 가능)">📎 문서함에 올리기</button>
+        <button class="btn" id="dpFolder" title="폴더 안의 지원 형식 문서를 모두 문서함에 올립니다 (하위 폴더 포함)">📁 폴더 올리기</button>
         <button class="btn" id="dpTemp" title="이번 작업에만 쓰고 문서함에는 남기지 않습니다 (하루 뒤 자동 삭제)">⏱ 임시로 올리기</button>
       </div>
       <div class="dp-foot"><button class="linkbtn" id="dpClear">선택 해제</button><button class="btn primary" id="dpDone">완료</button></div>
     </div>
   </div>
-  <input type="file" id="tempFile" hidden>
-  <button class="btn" id="attach" title="PDF · Word · PowerPoint · 한글 · 텍스트 · 스캔 이미지">📎 문서 올리기</button>
+  <input type="file" id="tempFile" multiple hidden>
+  <button class="btn" id="attach" title="PDF · Word · PowerPoint · 한글 · 텍스트 · 스캔 이미지 (여러 개 선택 · 폴더는 끌어다 놓기)">📎 문서 올리기</button>
   <button class="btn" id="newChat" hidden>＋ 새로 시작</button>
   <a class="btn" id="editApp" hidden>✏️ <span class="lbl">앱 편집</span></a>
   <button class="btn" id="marketBtn" aria-controls="marketPanel" aria-expanded="false" title="Agent 마켓 열기/닫기">🧩 <span class="lbl">Agent 마켓</span></button>
-  <input type="file" id="file" accept=".pdf,.docx,.doc,.rtf,.odt,.pptx,.ppt,.odp,.hwp,.hwpx,.txt,.md,.markdown,.csv,.tsv,.log,.json,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tif,.tiff" hidden>
+  <input type="file" id="folderFile" webkitdirectory multiple hidden>
+  <input type="file" id="file" multiple accept=".pdf,.docx,.doc,.rtf,.odt,.pptx,.ppt,.odp,.hwp,.hwpx,.txt,.md,.markdown,.csv,.tsv,.log,.json,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tif,.tiff" hidden>
   <div class="docinfo" id="docInfo"></div>
 </header>
 
@@ -548,6 +587,7 @@ let agent = null;         // 지금 열린 에이전트
 let docs = [];
 let convId = newId();
 let busy = false, controller = null;
+let pendingAsk = null;  // 답을 기다리는 확인 질문 {id, agent, box, placeholder, hint}
 let produced = false;     // 양식형 에이전트가 결과를 한 번 이상 냈는지 (이후 입력은 수정 요청)
 const formValues = {};    // 에이전트별 양식 입력 (새로 시작해도 유지)
 
@@ -796,6 +836,7 @@ function showRecent(id) {
   renderAnswer(b, r.md);
   if (a && a.mode !== "chat") { b.ans.classList.add("doc-out"); addTools(b, a, r.md); }
   addMailBar(b, r.md);
+  renderFlow(b, r.flow, r.took);
   const note = el("div", "msg note");
   note.append(`${ago(r.at)} ${a?.name || ""}에서 만든 결과입니다 · `);
   const open = el("a", null, `${a?.icon || ""} ${a?.name || "에이전트"} 열기`);
@@ -1430,6 +1471,7 @@ $("dpDone").onclick = () => closeDocPick();
 $("dpClear").onclick = () => { setSelection([], { silent: true }); renderDocList(); };
 $("dpSearch").oninput = renderDocList;
 $("dpUpload").onclick = () => $("file").click();
+$("dpFolder").onclick = () => $("folderFile").click();
 $("dpTemp").onclick = () => $("tempFile").click();
 document.addEventListener("mousedown", (e) => { if (!$("dpPop").hidden && !$("docPick").contains(e.target)) closeDocPick(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("dpPop").hidden) { closeDocPick(); $("dpBtn").focus(); } });
@@ -1473,33 +1515,135 @@ function autoRunIfReady() {
 
 // ── 업로드: 버튼 또는 화면 아무 곳에나 끌어다 놓기 ──
 // 올리기: temp 면 이번 작업에만 쓰는 임시 문서. 올린 문서는 고른 문서에 더한다 ('올리면 바로 실행' Agent 는 그 문서만)
-async function upload(file, temp = false) {
-  if (!file) return;
+// 여러 개 · 폴더째 올리기: 지원 형식만 골라 3개씩 동시에 올리고, 진행 상황과 결과(건너뜀·실패)를 한 줄로 알린다
+const UPLOAD_EXTS = new Set($("file").accept.split(","));
+const UPLOAD_SKIP = /^(\.|~\$)|^(thumbs\.db|desktop\.ini)$/i;  // 숨김 파일 · 오피스 잠금 파일
+const UPLOAD_CONFIRM = 30;  // 이보다 많으면 한 번 묻는다
+const UPLOAD_MAX_FILES = 300;
+const extOf = (name) => (name.lastIndexOf(".") > 0 ? name.slice(name.lastIndexOf(".")).toLowerCase() : "");
+
+async function sendFile(file, temp) {
+  const fd = new FormData(); fd.append("file", file, file.name);
+  const res = await fetch(`/api/upload${temp ? "?temp=true" : ""}`, { method: "POST", body: fd });
+  const data = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+  if (!res.ok) throw new Error(data.detail || "업로드 실패");
+  return data;
+}
+
+// 끌어다 놓은 것: 폴더면 하위 폴더까지 펼친다 (항목 목록은 이벤트가 끝나기 전에 읽어 둬야 한다)
+async function droppedFiles(dt) {
+  const entries = [...(dt.items || [])].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
+  const plain = [...(dt.files || [])];
+  if (!entries.some(e => e.isDirectory)) return plain;
+  const out = [];
+  const walk = async (entry) => {
+    if (out.length >= UPLOAD_MAX_FILES * 3) return;
+    if (entry.isFile) { out.push(await new Promise((ok, no) => entry.file(ok, no))); return; }
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((ok, no) => reader.readEntries(ok, no));
+      if (!batch.length) break;
+      for (const e of batch) await walk(e);
+    }
+  };
+  for (const e of entries) { try { await walk(e); } catch { /* 읽을 수 없는 항목은 건너뜀 */ } }
+  return out;
+}
+
+function toast(text) {  // 홈처럼 대화가 없는 화면의 업로드 진행 표시
+  let t = $("toast");
+  if (!t) { t = el("div", "toast"); t.id = "toast"; t.setAttribute("role", "status"); document.body.append(t); }
+  t.textContent = text; t.hidden = !text;
+  clearTimeout(t._h);
+  return t;
+}
+
+// 올리기: temp 면 이번 작업에만 쓰는 임시 문서. 올린 문서는 고른 문서에 더한다 ('올리면 바로 실행' Agent 는 그 문서만)
+async function upload(file, temp = false) { if (file) await uploadMany([file], temp); }
+
+async function uploadMany(list, temp = false) {
+  const all = [...(list || [])].filter(Boolean);
+  if (!all.length) return;
   closeMenu();
   closeDocPick(false);
+  const visible = all.filter(f => !UPLOAD_SKIP.test(f.name));
+  const files = visible.filter(f => UPLOAD_EXTS.has(extOf(f.name)));
+  const unsupported = visible.length - files.length;
   const inThread = !!agent && agent.doc !== "none";  // 문서를 쓰는 화면이면 대화에 진행 상황을 남긴다
-  const note = inThread ? addNote(`⏳ ${file.name} ${temp ? "임시로 " : ""}올리는 중…`) : null;
-  const fd = new FormData(); fd.append("file", file);
-  const res = await fetch(`/api/upload${temp ? "?temp=true" : ""}`, { method: "POST", body: fd });
-  const data = await res.json();
-  if (!res.ok) { if (note) note.textContent = `⚠ ${data.detail}`; else alert(data.detail); return; }
-  const doc = { path: data.pdf_path, filename: data.filename, label: data.label, temp, pending: !data.indexed && !temp };
-  if (temp) tempDocs = [doc, ...tempDocs.filter(t => t.path !== doc.path)];
-  else if (!docs.some(d => d.path === doc.path)) docs.push(doc);
+  if (!files.length) {
+    const msg = `⚠ 올릴 수 있는 문서가 없습니다 (지원하지 않는 형식 ${unsupported}개). 지원: PDF · Word · PowerPoint · 한글 · 텍스트 · 스캔 이미지`;
+    if (inThread) addNote(msg); else alert(msg);
+    return;
+  }
+  if (files.length > UPLOAD_MAX_FILES) {
+    alert(`한 번에 ${UPLOAD_MAX_FILES}개까지 올릴 수 있습니다 (지금 ${files.length}개). 폴더를 나눠 올려 주세요.`);
+    return;
+  }
+  if (files.length > UPLOAD_CONFIRM && !confirm(`문서 ${files.length}개를 ${temp ? "임시로 " : "문서함에 "}올릴까요?`)) return;
+
+  const one = files.length === 1;
+  const where = temp ? "임시로 " : "";
+  const note = inThread ? addNote("") : null;
+  const show = (text) => { if (note) note.textContent = text; else toast(text); };
+  show(one ? `⏳ ${files[0].name} ${where}올리는 중…` : `⏳ 문서 ${files.length}개 ${where}올리는 중… 0/${files.length}`);
+
+  const done = [], failed = [];
+  let next = 0, finished = 0;
+  const worker = async () => {
+    while (next < files.length) {
+      const f = files[next++];
+      try {
+        const data = await sendFile(f, temp);
+        done.push({ data, at: files.indexOf(f) });
+      } catch (e) { failed.push(`${f.name}: ${e.message}`); }
+      finished++;
+      if (!one) show(`⏳ 문서 ${files.length}개 ${where}올리는 중… ${finished}/${files.length}`);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
+  done.sort((x, y) => x.at - y.at);  // 고른 순서대로
+
+  const uploaded = done.map(({ data }) => ({ path: data.pdf_path, filename: data.filename, label: data.label, temp,
+                                            pending: !data.indexed && !temp, indexed: data.indexed }));
+  for (const doc of uploaded) {
+    if (temp) tempDocs = [doc, ...tempDocs.filter(t => t.path !== doc.path)];
+    else if (!docs.some(d => d.path === doc.path)) docs.push(doc);
+  }
   await loadDocs();
-  if (!inThread) return;  // 홈 등: 메뉴의 문서 목록에 나타난다
-  const others = agent.autoRun ? [] : selected.filter(s => s.path !== doc.path);
-  setSelection([...others, docs.find(d => d.path === doc.path) || doc].slice(-MAX_DOCS), { silent: true });
+
+  const extra = [unsupported && `지원하지 않는 형식 ${unsupported}개 건너뜀`, failed.length && `실패 ${failed.length}개`].filter(Boolean);
+  if (!uploaded.length) {
+    show(`⚠ 업로드하지 못했습니다 — ${failed.join(" · ")}`);
+    if (!note) toast(`⚠ 업로드 실패: ${failed[0]}`)._h = setTimeout(() => toast(""), 8000);
+    return;
+  }
+  if (!inThread) {  // 홈 등: 메뉴의 문서 목록에 나타난다
+    const t = toast(`📄 ${one ? uploaded[0].filename : `문서 ${uploaded.length}개`} 업로드 완료` + (extra.length ? ` · ${extra.join(" · ")}` : ""));
+    if (failed.length) t.title = failed.join("\n");
+    t._h = setTimeout(() => toast(""), 6000);
+    return;
+  }
+  const keep = agent.autoRun ? [] : selected.filter(s => !uploaded.some(u => u.path === s.path));
+  const fresh = uploaded.map(u => docs.find(d => d.path === u.path) || u);
+  setSelection([...keep, ...fresh].slice(-MAX_DOCS), { silent: true });
   if (agent.mode === "chat" || produced) newChat(true);
   else note.remove();
-  addNote(`📄 ${data.filename} ${temp ? "임시 문서로 " : ""}업로드 완료` + (data.indexed ? " (이미 인덱싱됨)" : " — 처음 실행할 때 문서를 읽어 들입니다")
-          + (selected.length > 1 ? ` · 지금 문서 ${selected.length}개 선택` : ""));
+  const head = one
+    ? `📄 ${uploaded[0].filename} ${temp ? "임시 문서로 " : ""}업로드 완료` + (uploaded[0].indexed ? " (이미 인덱싱됨)" : " — 처음 실행할 때 문서를 읽어 들입니다")
+    : `📄 문서 ${uploaded.length}개 ${temp ? "임시 문서로 " : ""}업로드 완료`;
+  const sel = fresh.length > MAX_DOCS
+    ? ` · 한 번에 ${MAX_DOCS}개까지 쓸 수 있어 마지막 ${MAX_DOCS}개를 골랐습니다 (나머지는 📄 문서 고르기에서)`
+    : (selected.length > 1 ? ` · 지금 문서 ${selected.length}개 선택` : "");
+  const n = addNote(head + sel + (extra.length ? ` · ${extra.join(" · ")}` : ""));
+  if (failed.length) { n.title = failed.join("\n"); n.append(el("div", "err", failed.slice(0, 5).join("\n") + (failed.length > 5 ? `\n… 외 ${failed.length - 5}개` : ""))); }
   if (!autoRunIfReady()) $("q").focus();
 }
 $("attach").onclick = $("sideUpload").onclick = () => $("file").click();
-$("file").onchange = (e) => { upload(e.target.files[0]); e.target.value = ""; };
+$("sideFolder").onclick = () => $("folderFile").click();
+$("file").onchange = (e) => { uploadMany(e.target.files); e.target.value = ""; };
+$("folderFile").onchange = (e) => { uploadMany(e.target.files); e.target.value = ""; };
 $("tempFile").accept = $("file").accept;
-$("tempFile").onchange = (e) => { upload(e.target.files[0], true); e.target.value = ""; };
+$("tempFile").onchange = (e) => { uploadMany(e.target.files, true); e.target.value = ""; };
 let dragDepth = 0;
 // 파일을 끌 때만 업로드 안내를 띄운다 (마켓의 Agent 카드를 끌 때는 앱 빌더의 팀 영역이 받는다)
 const isFileDrag = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
@@ -1508,7 +1652,7 @@ addEventListener("dragenter", (e) => {
   e.preventDefault();
   if (agent?.mode === "game" || !$("builder").hidden) return;
   dragDepth++;
-  $("dropzone").textContent = agent?.mode === "image" ? "여기에 놓으면 이 이미지를 분석합니다" : "여기에 놓으면 문서를 업로드합니다";
+  $("dropzone").textContent = agent?.mode === "image" ? "여기에 놓으면 이 이미지를 분석합니다" : "여기에 놓으면 문서를 업로드합니다 (여러 개 · 폴더도 가능)";
   $("dropzone").classList.add("on");
 });
 addEventListener("dragleave", (e) => { if (isFileDrag(e) && --dragDepth <= 0) { dragDepth = 0; $("dropzone").classList.remove("on"); } });
@@ -1518,7 +1662,7 @@ addEventListener("drop", (e) => {
   e.preventDefault(); dragDepth = 0; $("dropzone").classList.remove("on");
   if (agent?.mode === "game" || !$("builder").hidden) return;
   if (agent?.mode === "image") uploadImage(e.dataTransfer.files[0]);
-  else upload(e.dataTransfer.files[0]);
+  else droppedFiles(e.dataTransfer).then(files => uploadMany(files));  // 여러 파일 · 폴더째
 });
 
 // ── 이미지: 고르기 · 끌어다 놓기 · 붙여넣기(Ctrl+V) ──
@@ -1708,6 +1852,7 @@ function setComposer(placeholder, hint) { $("q").placeholder = placeholder; $("h
 
 function newChat(silent) {
   if (busy && controller) controller.abort();
+  closeAsk();
   fetch(`/api/conversations/${convId}`, { method: "DELETE" }).catch(() => {});
   convId = newId();
   loadDocs();
@@ -1760,7 +1905,7 @@ function addStep(b, ev) {
 function finishTrace(b, status) {
   b.trace.querySelector("li.active")?.classList.remove("active");
   const sec = ((performance.now() - b.t0) / 1000).toFixed(1);
-  b.sum.textContent = { ok: `${b.steps}단계 · ${sec}초`, stop: `중지됨 · ${sec}초`, err: `오류 · ${sec}초` }[status];
+  b.sum.textContent = { ok: `${b.steps}단계 · ${sec}초`, stop: `중지됨 · ${sec}초`, err: `오류 · ${sec}초`, ask: `확인 질문 · ${sec}초` }[status];
   b.prog.open = status === "err";
 }
 
@@ -1794,6 +1939,7 @@ function send() {
   if (busy) { controller?.abort(); return; }
   const question = $("q").value.trim();
   if (!question) return;
+  if (pendingAsk && pendingAsk.agent === agent.id) { $("q").value = ""; autosize(); answerAsk(question); return; }
   if (agent.mode === "image" && !image) { addNote("먼저 이미지를 올려 주세요 (끌어다 놓기 · 고르기 · Ctrl+V)."); return; }
   $("q").value = ""; autosize();
   if (agent.mode === "form" || agent.mode === "image") $("thread").querySelector(".formcard")?.remove();
@@ -1803,7 +1949,8 @@ function send() {
 async function run(body, userText) {
   const pdf_paths = agent.doc === "none" ? [] : selectedPaths();
   const pdf_path = pdf_paths[0] || null;
-  if (agent.doc === "required" && !pdf_path) {
+  if (!body.resume) closeAsk();  // 새 요청을 보내면 답하지 않은 확인 질문은 버린다
+  if (agent.doc === "required" && !pdf_path && !body.resume) {
     if (agent.mode === "form" && !produced) showForm();  // 입력창으로 보낸 경우 치운 양식을 되살린다
     addNote("먼저 위에서 문서를 고르거나 📎 로 올려 주세요.");
     return;
@@ -1815,6 +1962,7 @@ async function run(body, userText) {
   setBusy(true);
   controller = new AbortController();
   let gotFinal = false;
+  const started = Date.now();
   try {
     const res = await fetch(`/api/agents/${encodeURIComponent(current.id)}/stream`, {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
@@ -1835,8 +1983,10 @@ async function run(body, userText) {
         const subject = current.mode === "image" ? body.image_name
           : pdf_paths.length > 1 ? `문서 ${pdf_paths.length}개` : [...docs, ...tempDocs].find(d => d.path === pdf_path)?.filename;
         const title = recentTitle(current, ev.answer, userText, subject);
+        const took = Math.round((Date.now() - started) / 100) / 10;
         saveRecent({ id: newId().slice(0, 12), agent: current.id, at: Date.now(), md: ev.answer, prompt: userText,
-                     title: revising && current.mode !== "chat" ? `${title} (수정)` : title });
+                     title: revising && current.mode !== "chat" ? `${title} (수정)` : title,
+                     flow: ev.flow?.length ? ev.flow : undefined, took });
         if (current.mode === "form") {
           b.ans.classList.add("doc-out");
           addTools(b, current, ev.answer);
@@ -1855,7 +2005,14 @@ async function run(body, userText) {
           b.ans.after(w);
         }
         renderSources(b, ev.doc_id, ev.sources || []);
+        renderFlow(b, ev.flow, took);  // 답변 맨 끝: 어떤 Agent 를 어떤 순서로 썼는지
         finishTrace(b, "ok");
+        follow();
+      } else if (ev.type === "clarify") {  // 질의자 확인: 멈추고 답을 기다린다
+        gotFinal = true;
+        b.ans.classList.remove("cursor");
+        finishTrace(b, "ask");
+        renderAsk(b, ev, current);
         follow();
       } else if (ev.type === "error") throw Object.assign(new Error(ev.message), { detail: ev.detail });
     });
@@ -2252,6 +2409,72 @@ function jumpToSource(b, key) {
   card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   card.classList.add("flash");
   setTimeout(() => card.classList.remove("flash"), 1200);
+}
+
+// 질의자 확인 (HITL): 선택지 버튼 · 입력창 자유 답 · 알아서 진행 → 서버가 멈춘 자리에서 이어서 한다
+function renderAsk(b, ev, current) {
+  b.ans.className = "answer";
+  const box = el("div", "askbox"); box.setAttribute("role", "group"); box.setAttribute("aria-label", "확인 질문");
+  box.append(el("div", "ask-h", `🙋 확인이 필요합니다${ev.who ? " · " + ev.who : ""}`), el("div", "ask-q", ev.question));
+  if (ev.why) box.append(el("div", "ask-why", ev.why));
+  const opts = el("div", "ask-opts");
+  for (const o of ev.options || []) { const btn = el("button", "btn", o); btn.onclick = () => answerAsk(o); opts.append(btn); }
+  const skip = el("button", "btn skip", "알아서 진행");
+  skip.title = "에이전트가 가장 합리적인 가정으로 진행하고, 가정을 결과에 밝힙니다";
+  skip.onclick = () => answerAsk("");
+  opts.append(skip);
+  box.append(opts, el("div", "ask-hint", "다른 답은 아래 입력창에 쓰고 Enter" + (ev.asks_left ? "" : " · 이번 요청의 마지막 질문입니다")));
+  b.ans.replaceChildren(box);
+  pendingAsk = { id: ev.id, agent: current.id, box, placeholder: $("q").placeholder, hint: $("hint").textContent };
+  setComposer("확인 질문에 답하기", "답을 보내면 멈춘 자리에서 이어서 진행합니다 · 새 요청은 ＋ 새로 시작 후 보내세요");
+  $("q").focus();
+}
+function closeAsk(answer) {
+  const p = pendingAsk;
+  if (!p) return;
+  pendingAsk = null;
+  p.box.classList.add("done");
+  p.box.querySelectorAll("button").forEach(x => { x.disabled = true; });
+  if (answer !== undefined) { const a = el("div", "ask-a", "답: "); a.append(el("b", null, answer || "알아서 진행")); p.box.append(a); }
+  if ($("q").placeholder === "확인 질문에 답하기") setComposer(p.placeholder, p.hint);
+}
+function answerAsk(text) {
+  const p = pendingAsk;
+  if (!p || busy) return;
+  closeAsk(text);
+  run({ resume: { id: p.id, answer: text } }, text || "알아서 진행해 주세요");
+}
+
+// 처리 흐름: [① 📄 문서 수집] → [② 🧠 총괄] → [동시: ③ 📊 감성 | ③ 🔑 키워드] → [④ ✍️ 최종 답 정리]
+function renderFlow(b, flow, totalSec) {
+  if (!flow?.length) return;
+  const agents = flow.reduce((n, s) => n + s.items.length, 0);
+  const fmt = (s) => s >= 60 ? `${Math.floor(s / 60)}분 ${Math.round(s % 60)}초` : `${s < 10 ? s.toFixed(1) : Math.round(s)}초`;
+  const box = el("details", "flowbox"); box.open = true;
+  const sum = el("summary");
+  sum.append(el("b", null, "🧭 처리 흐름"), ` · ${flow.length}단계 · Agent ${agents}번`);
+  if (totalSec) sum.append(` · 총 ${fmt(totalSec)}`);
+  if (flow.some(s => s.parallel)) sum.append(" · 점선 묶음은 동시 실행");
+  box.append(sum);
+  const ol = el("ol", "aflow"); ol.setAttribute("aria-label", "사용한 Agent 순서");
+  const STATUS = { ok: "", fail: "실패", warn: "중단", ask: "확인 대기" };
+  flow.forEach((s, i) => {
+    const li = el("li");
+    if (i) li.append(el("span", "arrow", "→"));
+    const st = el("span", "stage" + (s.parallel ? " par" : ""));
+    for (const it of s.items) {
+      const chip = el("span", "chip" + (it.status && it.status !== "ok" ? " " + it.status : ""));
+      const detail = [it.note, it.sec != null ? fmt(it.sec) : ""].filter(Boolean).join(" · ");
+      chip.title = [`${i + 1}단계`, `${it.icon} ${it.name}`, STATUS[it.status] || "", detail].filter(Boolean).join(" · ");
+      chip.append(el("span", "no", String(i + 1)), el("span", null, it.icon || "•"), el("span", "n", it.name));
+      if (detail) chip.append(el("span", "d", detail));
+      st.append(chip);
+    }
+    li.append(st);
+    ol.append(li);
+  });
+  box.append(ol);
+  b.m.append(box);
 }
 
 function renderSources(b, docId, sources) {

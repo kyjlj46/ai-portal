@@ -77,12 +77,13 @@ def build_agent(agent_id: str = "qa"):
             },
         ]
 
+    from .hitl import CLARIFY_RULE, ask_user
     from .market import extra_tools
 
     return create_deep_agent(
         model=main_model,
-        tools=DOC_TOOLS + extra_tools(spec.extra_tools),
-        system_prompt=spec.prompt or MAIN_PROMPT,
+        tools=DOC_TOOLS + extra_tools(spec.extra_tools) + [ask_user],  # ask_user: 모호하면 질의자에게 묻는다 (rag.hitl)
+        system_prompt=(spec.prompt or MAIN_PROMPT) + CLARIFY_RULE,  # CLARIFY_RULE 은 줄바꿈으로 시작한다
         subagents=subagents,
     )
 
@@ -97,6 +98,7 @@ _TOOL_STUB = re.compile(r"\[?\s*[a-z][a-z_]{2,}(?:\s*\(.*\)|(?:\s+[\w-]+\s*=\s*\
 _TOOL_ARG_KEYS = {
     "description", "subagent_type", "query", "url", "doc_id", "page", "pages", "chunk_id", "k", "max_results",
     "chunk_size", "chunk_overlap", "dpi", "window", "start", "count", "max_chars", "todos", "name", "arguments", "args",
+    "question", "options", "why",
 }
 
 

@@ -208,12 +208,16 @@ def _step(kind: str, text: str) -> dict:
 def image_stream(image_id: str, question: str, history: list | None = None, filename: str = "") -> Iterator[dict]:
     """ask_stream 과 같은 형식의 이벤트를 낸다 (웹 화면 재사용)."""
     try:
+        import time
+
         path = image_path(image_id)
         first = not history
         if first:
             yield _step("ingest", f"이미지 불러옴: {filename or path.name}")
             yield _step("read", "글자 인식(OCR)과 색·크기 분석 중…")
+        t0 = time.time()
         info = read_image(image_id)
+        t_read = round(time.time() - t0, 1)
         if first:
             yield _step("result", f"→ {info['width']}×{info['height']}, 글자 상자 {info['boxes']}개 인식")
         yield _step("answer", "이미지를 보며 분석 작성 중…" if vision_enabled() else "인식한 글자와 배치로 분석 작성 중…")
@@ -230,7 +234,9 @@ def image_stream(image_id: str, question: str, history: list | None = None, file
         else:
             human = HumanMessage(question)
 
+        t1 = time.time()
         reply = _model().invoke([system, *(history or []), human])
+        t_llm = round(time.time() - t1, 1)
         answer = reply.text.strip() or "분석 결과를 만들지 못했습니다. 질문을 바꿔 다시 시도해 주세요."
         if history is not None:
             if first:  # 첫 턴은 이미지 맥락(OCR 등)이 담긴 요청을 기록에 남겨 이어지는 질문의 근거로 쓴다
@@ -239,7 +245,13 @@ def image_stream(image_id: str, question: str, history: list | None = None, file
                 history.extend([human, AIMessage(answer)])
             if len(history) > 2 * MAX_TURNS:  # 맨 앞(이미지 맥락)은 남기고 중간 턴을 버린다
                 del history[2 : len(history) - 2 * (MAX_TURNS - 1)]
+        flow = []  # 처리 흐름 (답변 끝 표시, rag.stream.Flow 와 같은 모양)
+        if first:
+            flow.append({"parallel": False, "items": [{"icon": "🔤", "name": "글자 인식 (OCR)", "status": "ok",
+                                                         "note": f"글자 상자 {info['boxes']}개", "sec": t_read}]})
+        flow.append({"parallel": False, "items": [{"icon": "🖼️", "name": "이미지 분석", "status": "ok",
+                                                     "note": "이미지 + 글자" if vision_enabled() else "인식한 글자 기준", "sec": t_llm}]})
         yield {"type": "final", "answer": answer, "sources": [], "steps": [], "doc_id": None, "agent": "image",
-               "ocr_text": info["ocr"]}
+               "ocr_text": info["ocr"], "flow": flow}
     except Exception as e:  # noqa: BLE001 - 화면에 오류를 보여주기 위함
         yield {"type": "error", "message": f"{type(e).__name__}: {e}"}

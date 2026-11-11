@@ -315,7 +315,7 @@ def test_parallel_stage_runs_concurrently_and_gets_previous_results(client, monk
             self.name = name
 
         def invoke(self, inputs, config=None):
-            assert config == {"recursion_limit": stream.STEP_LIMIT}  # 단계마다 반복 한도
+            assert config["recursion_limit"] == stream.STEP_LIMIT and config["configurable"] == {"ask_closed": False}  # 단계마다 반복 한도
             with lock:
                 active[0] += 1
                 peak[0] = max(peak[0], active[0])
@@ -393,7 +393,7 @@ def test_orchestrator_loop_is_capped(client, monkeypatch):
 
     class Looping:
         def stream(self, inputs, config=None, **kw):
-            assert config == {"recursion_limit": stream.AGENT_LIMIT}
+            assert config["recursion_limit"] == stream.AGENT_LIMIT
             for i in range(50):  # 같은 팀원에게 끝없이 맡기는 총괄
                 produced.append(i)
                 call = AIMessage("", tool_calls=[{"name": "task", "args": {"subagent_type": "minutes", "description": "정리"}, "id": f"t{i}"}])
@@ -407,3 +407,62 @@ def test_orchestrator_loop_is_capped(client, monkeypatch):
     final = out[-1]
     assert final["type"] == "final" and final["answer"] == "## 지금까지 결과 정리"
     assert "반복 한도" in final["warnings"][0]
+
+
+# ─────────────────────────── 처리 흐름 (답변 끝 'Agent 를 어떤 순서로 썼는지') ───────────────────────────
+
+
+def _names(flow):
+    return [[it["name"] for it in s["items"]] for s in flow]
+
+
+def test_pipeline_final_has_flow_with_parallel_group(client, monkeypatch):
+    app = client.post("/api/apps", json={**APP, "agents": ["translator", "sentiment", "keywords"]}).json()
+    monkeypatch.setattr(stream, "get_agent", lambda agent_id: StepAgent(agent_id))
+    flow = _run(app["id"], "기사")[-1]["flow"]
+    from rag.market import BY_ID
+
+    assert _names(flow) == [[BY_ID["translator"].name], [BY_ID["sentiment"].name, BY_ID["keywords"].name]]
+    assert [s["parallel"] for s in flow] == [False, True]
+    assert all(it["status"] == "ok" and it["sec"] is not None for s in flow for it in s["items"])
+
+
+def test_auto_flow_records_delegations_in_order(client, monkeypatch):
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    app = client.post("/api/apps", json={**APP, "run": "auto"}).json()
+
+    class Orchestrator:
+        def stream(self, inputs, **kw):
+            one = AIMessage("", tool_calls=[{"name": "task", "args": {"subagent_type": "minutes", "description": "정리"}, "id": "t1"}])
+            yield (), "updates", {"model": {"messages": [one]}}
+            yield ("tools:x",), "updates", {"model": {"messages": [AIMessage("", tool_calls=[{"name": "web_search", "args": {"query": "q"}, "id": "w"}])]}}
+            yield (), "updates", {"tools": {"messages": [ToolMessage("회의록", tool_call_id="t1", name="task")]}}
+            two = AIMessage("", tool_calls=[{"name": "task", "args": {"subagent_type": s, "description": "d"}, "id": f"t{i}"}
+                                            for i, s in [(2, "action_items"), (3, "email")]])
+            yield (), "updates", {"model": {"messages": [two]}}
+            yield (), "updates", {"tools": {"messages": [ToolMessage("a", tool_call_id="t2", name="task"),
+                                                          ToolMessage("Error: 실패", tool_call_id="t3", name="task")]}}
+            yield (), "updates", {"model": {"messages": [AIMessage("최종 결과")]}}
+
+    monkeypatch.setattr(stream, "get_agent", lambda agent_id: Orchestrator())
+    flow = _run(app["id"], "메모")[-1]["flow"]
+    assert _names(flow)[1:] == [["회의록 정리"], ["할 일 추출", "이메일 작성"], ["최종 답 정리"]]
+    assert flow[0]["items"][0]["name"].endswith("· 총괄")
+    assert flow[1]["items"][0]["note"] == "웹 검색 1"  # 팀원이 쓴 도구
+    assert flow[2]["parallel"] and flow[2]["items"][1]["status"] == "fail"
+
+
+def test_fallback_flow_marks_orchestrator_and_continues_with_steps(client, monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    app = client.post("/api/apps", json={**APP, "run": "auto"}).json()
+
+    class Orchestrator:
+        def stream(self, inputs, **kw):
+            yield (), "updates", {"model": {"messages": [AIMessage("직접 답함")]}}
+
+    monkeypatch.setattr(stream, "get_agent", lambda agent_id: Orchestrator() if agent_id.startswith("app:") else StepAgent(agent_id))
+    flow = _run(app["id"], "메모")[-1]["flow"]
+    assert flow[0]["items"][0]["status"] == "fail" and "순서대로" in flow[0]["items"][0]["note"]
+    assert _names(flow)[1:] == [["회의록 정리"], ["할 일 추출"], ["이메일 작성"]]

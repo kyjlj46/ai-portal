@@ -98,7 +98,14 @@ async def upload(file: UploadFile = File(...), temp: bool = False):
     else:
         UPLOAD_DIR.mkdir(exist_ok=True)
         dest = UPLOAD_DIR / safe
-    dest.write_bytes(await file.read())
+    data = await file.read()
+    if not temp:  # 이름은 같고 내용이 다른 문서(폴더 업로드의 하위 폴더 등)는 덮어쓰지 않고 '이름 (2).pdf' 로 둘 다 둔다
+        n = 2
+        while dest.exists() and dest.read_bytes() != data:
+            dest = UPLOAD_DIR / f"{Path(safe).stem} ({n}){Path(safe).suffix}"
+            n += 1
+        safe = dest.name
+    dest.write_bytes(data)
     doc_id = store.doc_id_for(dest)
     indexed = bool(store.load_chunks(doc_id))
     return {"pdf_path": str(dest), "filename": safe, "doc_id": doc_id, "indexed": indexed,
@@ -201,13 +208,14 @@ def delete_conversation(conv_id: str):
     return {"ok": True}
 
 
-def _sse(path: str | list[str] | None, question: str, conversation_id: str | None, agent_id: str = "qa") -> StreamingResponse:
+def _sse(path: str | list[str] | None, question: str, conversation_id: str | None, agent_id: str = "qa",
+         resume: dict | None = None) -> StreamingResponse:
     from rag.stream import ask_stream, conversation
 
     history = conversation(f"{agent_id}:{conversation_id}") if conversation_id else None
 
     def events():
-        for ev in ask_stream(path, question, history, agent_id=agent_id):
+        for ev in ask_stream(path, question, history, agent_id=agent_id, **({"resume": resume} if resume else {})):
             yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
@@ -233,6 +241,15 @@ class RunRequest(BaseModel):
     conversation_id: str | None = None
     image_id: str | None = None  # 이미지 분석 에이전트
     image_name: str | None = None
+    resume: "ResumeRequest | None" = None  # 질의자 확인 질문에 대한 답 → 멈춘 자리에서 이어서 (rag.hitl)
+
+
+class ResumeRequest(BaseModel):
+    id: str
+    answer: str = ""  # 비우면 '알아서 진행'
+
+
+RunRequest.model_rebuild()
 
 
 @app.get("/api/status")
@@ -452,6 +469,12 @@ def agent_stream(agent_id: str, req: RunRequest):
         raise HTTPException(400, f"{spec.name}은(는) /api/omok/move 로 둡니다.")
     if spec.mode == "image":
         return _image_sse(req)
+    if req.resume:  # 문서·요청은 멈출 때 보관한 것을 그대로 쓴다
+        if len(req.resume.answer) > 4000:
+            raise HTTPException(400, "답이 너무 깁니다 (4,000자 이하).")
+        if err := check_config():
+            raise HTTPException(500, err)
+        return _sse(None, "", req.conversation_id, agent_id, resume=req.resume.model_dump())
     from rag.multidoc import MAX_DOCS
 
     paths = list(dict.fromkeys(req.pdf_paths or ([req.pdf_path] if req.pdf_path else [])))

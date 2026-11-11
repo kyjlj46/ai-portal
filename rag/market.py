@@ -370,11 +370,13 @@ def extra_tools(names: list[str]) -> list:
 
 def subagent(item_id: str, model, doc_tools: list) -> dict:
     """deepagents 하위 에이전트 정의."""
+    from .hitl import SUBAGENT_RULE
+
     m = BY_ID[item_id]
     return {
         "name": m.id,
         "description": f"{m.name}: {m.description}" + (" (문서 작업이면 task 설명에 doc_id 를 꼭 넣으세요)" if m.uses_doc else ""),
-        "system_prompt": m.prompt,
+        "system_prompt": m.prompt + SUBAGENT_RULE,  # 팀원은 직접 묻지 않고 총괄에게 '확인 필요' 로 넘긴다
         "tools": (list(doc_tools) if m.uses_doc else []) + extra_tools(m.tools),
         "model": model,
     }

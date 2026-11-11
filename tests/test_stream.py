@@ -114,3 +114,15 @@ def test_summary_preloads_short_document_but_keeps_history_compact(indexed_doc, 
     assert "===== p.1 =====" in sent and "512명" in sent  # 전문이 요청에 붙음
     assert "=====" not in history[0].content  # 기록에는 요청문만
     assert out[-1]["answer"] == "## 한 줄 요약\n직원 512명 (p.1)" and [s["page"] for s in out[-1]["sources"]] == [1]
+
+
+def test_qa_flow_shows_main_agent_with_tool_counts(indexed_doc, sample_pdf, monkeypatch):
+    monkeypatch.setattr("rag.ingest.is_indexed", lambda doc_id: True)
+    call = AIMessage("", tool_calls=[{"name": "search_chunks", "args": {"query": "a"}, "id": "c1"},
+                                     {"name": "read_page", "args": {"page": 1}, "id": "c2"}])
+    events = [((), "updates", {"model": {"messages": [call]}}),
+              ((), "updates", {"model": {"messages": [AIMessage("답(p.1)")]}})]
+    monkeypatch.setattr(stream, "get_agent", lambda *a: FakeAgent(events))
+    flow = list(stream.ask_stream(str(sample_pdf), "질문"))[-1]["flow"]
+    assert len(flow) == 1 and flow[0]["items"][0]["note"] == "문서 검색 1 · 페이지 읽기 1"
+    assert flow[0]["items"][0]["sec"] is not None
