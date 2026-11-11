@@ -6,7 +6,7 @@ import zipfile
 import docx
 import pytest
 
-from rag import convert, ingest, store, tools
+from portal import convert, ingest, store, tools
 
 
 def test_kind_of():

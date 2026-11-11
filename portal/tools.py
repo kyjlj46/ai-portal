@@ -1,6 +1,6 @@
 """RAG 파이프라인 단계별 도구.
 
-수집 단계(ocr_pages, chunk_document)는 rag.ingest 가 호출하고,
+수집 단계(ocr_pages, chunk_document)는 portal.ingest 가 호출하고,
 질의응답 에이전트는 search_chunks / get_chunk_context / read_page 를 쓴다.
 inspect_pdf / extract_text_layer 는 텍스트 레이어 진단용으로 남겨 둔다.
 """

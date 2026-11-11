@@ -4,7 +4,7 @@ import io
 
 import pytest
 
-from rag import catalog, convert, extra_tools, ingest, market, store
+from portal import catalog, convert, extra_tools, ingest, market, store
 
 
 def test_image_documents_are_supported(tmp_path):
@@ -37,7 +37,7 @@ def test_chunk_stats_and_settings(indexed_doc):
     out = extra_tools.chunk_stats.invoke({"doc_id": indexed_doc})
     assert "현재 설정: chunk_size=60, chunk_overlap=10" in out  # conftest 가 60/10 으로 청킹
     assert "청크 수:" in out and "페이지별 청크 수: p.1=" in out and "청크가 없는 페이지: [2]" in out
-    from rag.tools import chunk_document
+    from portal.tools import chunk_document
 
     chunk_document.invoke({"doc_id": indexed_doc, "chunk_size": 200, "chunk_overlap": 20})
     assert "chunk_size=200, chunk_overlap=20" in extra_tools.chunk_stats.invoke({"doc_id": indexed_doc})
@@ -50,9 +50,9 @@ def test_ocr_report_and_reocr(indexed_doc, monkeypatch):
     assert "확인이 필요한 페이지: [2]" in report and "p.2 | ocr | 신뢰도 0.41" in report
     assert "p.1 | text" in report  # 텍스트 레이어로 뽑은 페이지
 
-    import rag.ocr
+    import portal.ocr
 
-    monkeypatch.setattr(rag.ocr, "ocr_page", lambda pdf, page, dpi=200: {"text": "선명하게 다시 읽은 2쪽 내용입니다. 표와 본문이 모두 인식되었습니다.", "raw": "x", "quality": 0.95, "boxes": 9})
+    monkeypatch.setattr(portal.ocr, "ocr_page", lambda pdf, page, dpi=200: {"text": "선명하게 다시 읽은 2쪽 내용입니다. 표와 본문이 모두 인식되었습니다.", "raw": "x", "quality": 0.95, "boxes": 9})
     out = extra_tools.reocr_pages.invoke({"doc_id": indexed_doc, "pages": "2"})
     assert "p.2: 신뢰도 0.41 → 0.95" in out and "재인덱싱:" in out
     assert any("다시 읽은 2쪽" in c["text"] for c in store.load_chunks(indexed_doc))  # 인덱스에도 반영
@@ -116,7 +116,7 @@ def test_market_specs_get_their_tools(monkeypatch):
     sub = market.subagent("ocr", model=None, doc_tools=["DOC"])
     assert sub["tools"][0] == "DOC" and [t.name for t in sub["tools"][1:]] == ["ocr_report", "reocr_pages"]
 
-    from rag import agent
+    from portal import agent
 
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
     monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")
@@ -142,7 +142,7 @@ def test_upload_accepts_images(tmp_path, monkeypatch):
 def test_tool_call_stub_is_not_accepted_as_answer(monkeypatch):
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from rag import agent
+    from portal import agent
 
     assert agent.is_tool_stub("[read_page page=2]") and agent.is_tool_stub("read_page(doc_id='x', page=2)")
     assert not agent.is_tool_stub("## OCR 결과 요약\n- 6페이지") and not agent.is_tool_stub("[p.2] 내용")
@@ -176,7 +176,7 @@ def test_web_search_retries_without_quotes(monkeypatch):
 def test_web_sources_are_appended_from_pages_actually_read():
     from langchain_core.messages import ToolMessage
 
-    from rag.stream import add_web_sources
+    from portal.stream import add_web_sources
 
     msgs = [ToolMessage("[vLLM 문서] https://docs.vllm.ai/perf\n본문", tool_call_id="1", name="fetch_url"),
             ToolMessage("[vLLM 문서] https://docs.vllm.ai/perf\n본문", tool_call_id="2", name="fetch_url"),  # 같은 페이지 두 번
@@ -192,7 +192,7 @@ def test_web_sources_are_appended_from_pages_actually_read():
 
 
 def test_second_ocr_pass_only_fills_missed_lines():
-    from rag.ocr import merge_missing
+    from portal.ocr import merge_missing
 
     base = [{"x0": 0, "y0": 100, "x1": 300, "y1": 140, "text": "결제일 2026-11-10", "score": 0.99}]
     extra = [

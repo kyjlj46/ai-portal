@@ -2,7 +2,7 @@
 
 import random
 
-from rag import omok
+from portal import omok
 
 
 def test_five_at_and_overline():

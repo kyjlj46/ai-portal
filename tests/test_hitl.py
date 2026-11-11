@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, ToolMessage
 
 import web
-from rag import hitl, stream
+from portal import hitl, stream
 
 
 @pytest.fixture

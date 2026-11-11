@@ -1,4 +1,4 @@
-from rag import store, tools
+from portal import store, tools
 
 
 def test_parse_pages():
@@ -62,13 +62,13 @@ def test_chunk_context(indexed_doc):
 def test_build_agent(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
     monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")
-    from rag.agent import build_agent
+    from portal.agent import build_agent
 
     assert build_agent() is not None
 
 
 def test_openai_compatible_model_disables_streaming_by_default(monkeypatch):
-    from rag.llm import make_model
+    from portal.llm import make_model
 
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
     monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")

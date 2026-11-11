@@ -509,9 +509,9 @@ def ask_stream(path: str | list[str] | None, question: str, history: list | None
     """history 를 주면 이전 대화를 이어받고, 이번 턴의 메시지를 history 에 덧붙인다 (CLI 대화형).
 
     agent_id 로 catalog 의 에이전트를 고른다. path 가 None 이면 참고 문서 없이 실행한다 (보고서/기안).
-    path 에 문서 목록을 주면 여러 문서를 함께 쓴다 (문서 표시 D1… 와 (D1 p.3) 출처, rag.multidoc).
+    path 에 문서 목록을 주면 여러 문서를 함께 쓴다 (문서 표시 D1… 와 (D1 p.3) 출처, portal.multidoc).
     에이전트가 질의자에게 물으면 {"type": "clarify", "id", "question", "options", ...} 를 내고 멈춘다.
-    resume={"id": 그 id, "answer": 질의자의 답} 으로 다시 부르면 멈춘 자리에서 이어서 한다 (rag.hitl).
+    resume={"id": 그 id, "answer": 질의자의 답} 으로 다시 부르면 멈춘 자리에서 이어서 한다 (portal.hitl).
     """
     from datetime import date
 

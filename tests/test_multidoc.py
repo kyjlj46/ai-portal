@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
 import web
-from rag import ingest, multidoc, store, stream, tools
+from portal import ingest, multidoc, store, stream, tools
 
 
 @pytest.fixture

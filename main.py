@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 sys.stdout.reconfigure(encoding="utf-8")  # Windows 콘솔(cp949)에서 특수문자 출력 오류 방지
 
-from rag.stream import ask_stream  # noqa: E402
+from portal.stream import ask_stream  # noqa: E402
 
 ICON = {"ingest": "📄", "think": "🧠", "search": "🔎", "read": "📖", "delegate": "🤝", "result": "  ↳", "answer": "✍️"}
 

@@ -72,7 +72,7 @@ def to_pdf(src: str | Path, dst: str | Path, timeout: int = CONVERT_TIMEOUT) -> 
     dst.unlink(missing_ok=True)
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "rag.convert", kind_of(src), str(src), str(dst)],
+            [sys.executable, "-m", "portal.convert", kind_of(src), str(src), str(dst)],
             cwd=Path(__file__).resolve().parent.parent,
             capture_output=True,
             text=True,
@@ -391,6 +391,6 @@ def _hwp_para(raw: bytes) -> str:
     return "".join(out)
 
 
-if __name__ == "__main__":  # 변환 하위 프로세스: python -m rag.convert <word|ppt|hwp> <src> <dst>
+if __name__ == "__main__":  # 변환 하위 프로세스: python -m portal.convert <word|ppt|hwp> <src> <dst>
     kind, src, dst = sys.argv[1:4]
     {"word": _convert_word, "ppt": _convert_ppt, "hwp": _convert_hwp}[kind](src, dst)

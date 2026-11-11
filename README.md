@@ -1,4 +1,4 @@
-# pdf-rag-agent
+# ai-portal
 
 [LangChain deep-agents](https://github.com/langchain-ai/deepagents)로 만든 간단한 문서 RAG입니다.
 문서의 모든 페이지를 이미지로 OCR하고, LLM이 표·띄어쓰기·읽기 순서를 정리해서 인덱싱합니다. 발표 장표처럼 텍스트 레이어가 깨진 문서도 읽을 수 있습니다.
@@ -17,7 +17,7 @@
 
 - **Agent 마켓 (오른쪽 패널, 🧩 버튼)**: 단독으로 쓰거나 앱에 담을 수 있는 Agent 19개 — 번역·교정·윤문·이메일 작성·회의록 정리·할 일 추출·키워드·태그 추출·감성·여론 분석·SWOT 분석·발표자료 개요·SQL 작성, ⚡ 업로드 즉시 요약·🧩 청킹·🔍 OCR·🌍 웹 검색, 그리고 기존 문서 검색·요약·보고서·결재 기안·뉴스 기사.
   - ⚡ 업로드 즉시 요약 / 🧩 청킹 / 🔍 OCR 은 그 화면에서 문서를 올리거나 고르기만 하면 바로 실행됩니다. 청킹은 청크 수·길이·경계 품질을 점검하고 요청하면 크기·겹침을 바꿔 다시 나눕니다. OCR 은 페이지별 신뢰도를 보고하고 요청하면 해당 페이지를 더 높은 해상도로 다시 인식합니다.
-  - 🌍 웹 검색은 API 키 없이 동작합니다(ddgs: Bing·Google·Yahoo). 읽은 페이지는 출처 링크로 붙습니다. 서버가 내부망 주소를 읽지 못하게 막아 두었습니다. 검색과 분류 필터가 있고, 넓은 화면에서는 오른쪽 열, 좁은 화면에서는 서랍으로 열립니다. 목록은 [rag/market.py](rag/market.py) 의 `MARKET`.
+  - 🌍 웹 검색은 API 키 없이 동작합니다(ddgs: Bing·Google·Yahoo). 읽은 페이지는 출처 링크로 붙습니다. 서버가 내부망 주소를 읽지 못하게 막아 두었습니다. 검색과 분류 필터가 있고, 넓은 화면에서는 오른쪽 열, 좁은 화면에서는 서랍으로 열립니다. 목록은 [portal/market.py](portal/market.py) 의 `MARKET`.
 - **커스텀 앱 만들기 (＋ 새 앱 만들기)**: 마켓의 Agent 를 끌어다 '팀' 에 놓거나 ＋ 담기로 1~8개를 담아 하나의 DeepAgent 앱을 만듭니다. 이름·아이콘·설명·지시사항·문서 사용(안 함/선택/필수)·예시 요청을 정하고 순서를 바꿀 수 있으며, 추천 조합 4가지로 시작할 수도 있습니다. 앱은 `data/apps/<id>.json` 에 저장되고 왼쪽 메뉴·홈의 '내 앱' 에 나타납니다.
   - 실행 방식 ⛓ 순서대로(기본): 담은 순서대로 모든 Agent 를 실행하고 앞 단계 결과를 다음 단계에 넘깁니다. 결과는 '모든 단계' 또는 '마지막 결과만(중간 결과는 접어서)'.
   - 실행 방식 🧠 총괄 에이전트가 판단: DeepAgent 총괄 에이전트가 요청을 보고 필요한 하위 에이전트에게 task 로 맡깁니다. 유연하지만 gpt-oss 에서는 단계를 건너뛰거나 결과를 덧붙이는 경우가 있어 기본값을 '순서대로' 로 두었습니다.
@@ -31,10 +31,10 @@
 - 양식형 에이전트는 결과가 나온 뒤 입력창에 "예산을 부가세 포함으로" 같은 수정 요청을 적으면 전체 문서를 고쳐 다시 씁니다.
 - 결과는 복사, Markdown, Word(.docx)로 저장할 수 있습니다.
 - 15쪽 이하 문서는 요약·보고서·기안을 쓸 때 전문을 페이지 표시와 함께 모델에 넘깁니다. 더 긴 문서는 에이전트가 구성표(`document_outline`)와 검색으로 읽습니다.
-- 에이전트 정의(이름, 양식 필드, 프롬프트)는 [rag/catalog.py](rag/catalog.py) 한 곳에 있습니다. 카드를 추가하려면 `AGENTS` 에 `AgentSpec` 을 하나 더 넣으면 됩니다.
+- 에이전트 정의(이름, 양식 필드, 프롬프트)는 [portal/catalog.py](portal/catalog.py) 한 곳에 있습니다. 카드를 추가하려면 `AGENTS` 에 `AgentSpec` 을 하나 더 넣으면 됩니다.
 - 이미지 분석: 끌어다 놓기·파일 고르기·붙여넣기(Ctrl+V)로 올립니다. 기본 모델(gpt-oss)은 이미지를 직접 볼 수 없어서 RapidOCR 로 읽은 글자·배치와 크기·주요 색 정보로 분석합니다. `.env` 에 `VISION_MODEL`(이미지 입력을 받는 모델)을 지정하면 이미지 자체도 함께 보냅니다.
-- 뉴스 기사: 논조는 각 매체의 널리 알려진 성향·문체를 참고하는 수준입니다. 제호·기자 바이라인은 넣지 않고 마지막 줄에 'AI 작성 초안 · ○○ 논조 참고 · 게재 전 사실 확인 필요' 를 붙입니다. 입력에 없는 사실·발언은 [확인 필요]/[인용 필요] 로 둡니다. 논조 목록은 [rag/catalog.py](rag/catalog.py) 의 `_OUTLETS` 에서 고칩니다.
-- 오목: 자유룰(다섯 개 이상이면 승리, 금수 없음). AI 는 LLM 이 아니라 규칙 기반 엔진([rag/omok.py](rag/omok.py))이라 한 수에 0.1초 안쪽입니다. 어려움은 상대 응수까지 한 수 더 내다봅니다. 전적·설정은 브라우저에 저장됩니다.
+- 뉴스 기사: 논조는 각 매체의 널리 알려진 성향·문체를 참고하는 수준입니다. 제호·기자 바이라인은 넣지 않고 마지막 줄에 'AI 작성 초안 · ○○ 논조 참고 · 게재 전 사실 확인 필요' 를 붙입니다. 입력에 없는 사실·발언은 [확인 필요]/[인용 필요] 로 둡니다. 논조 목록은 [portal/catalog.py](portal/catalog.py) 의 `_OUTLETS` 에서 고칩니다.
+- 오목: 자유룰(다섯 개 이상이면 승리, 금수 없음). AI 는 LLM 이 아니라 규칙 기반 엔진([portal/omok.py](portal/omok.py))이라 한 수에 0.1초 안쪽입니다. 어려움은 상대 응수까지 한 수 더 내다봅니다. 전적·설정은 브라우저에 저장됩니다.
 - API: `GET /api/agents`, `POST /api/agents/{id}/stream` (SSE), `POST /api/export/docx`, `POST /api/images`, `POST /api/omok/move`, `GET /api/status`, `GET /api/market`, `GET·POST /api/apps`, `GET·PUT·DELETE /api/apps/{id}`, `POST /api/email/send`, `POST /api/custom-agents/design`, `GET·POST /api/custom-agents`, `GET·PUT·DELETE /api/custom-agents/{id}`, `POST /api/upload?temp=true`, `DELETE /api/documents/temp`
 
 지원 형식:
@@ -51,7 +51,7 @@
 Word·PowerPoint·한글 변환은 설치된 프로그램을 자동화(COM)해서 별도 프로세스로 실행합니다. 프로그램이 없거나, 한글 보안 확인 창 등으로 3분 안에 끝나지 않으면 파일에서 텍스트를 직접 뽑습니다(`.docx` `.pptx` `.hwpx` `.hwp`). 이때는 문단·표·쪽 나누기(PPT는 슬라이드) 단위의 구간으로 나뉘고 페이지 이미지는 없습니다.
 
 ```
-[수집 - 코드로 고정 실행: rag/ingest.py]
+[수집 - 코드로 고정 실행: portal/ingest.py]
  (Word/PowerPoint/한글이면 PDF 변환) → 페이지 → 이미지(200dpi) → RapidOCR(한국어 PP-OCRv5, 로컬)로 글자+좌표 인식
        (기본 검출 + 촘촘한 두 번째 검출로 놓친 줄 채움, OCR_SECOND_PASS)
        → 좌표로 행/칸 복원 → LLM이 마크다운(표/목록/제목)으로 정리
@@ -124,13 +124,13 @@ LLM과 OCR 엔진은 호출하지 않습니다. 가짜 객체로 바꿔 레이�
 
 ## 구조
 
-- `rag/convert.py`: Word/한글 → PDF 변환, 변환 불가 시 텍스트 직접 추출
-- `rag/ocr.py`: 페이지 렌더링, RapidOCR, 레이아웃 복원, LLM 정리
-- `rag/ingest.py`: 수집 파이프라인 (전체 OCR → 청킹)
-- `rag/tools.py`: 단계별 도구 (OCR 재처리, 청킹, 검색)
-- `rag/agent.py`: `create_deep_agent` 정의, 최종 답변·출처 처리
-- `rag/stream.py`: 질문 처리 과정을 단계 이벤트로 스트리밍 (웹 SSE / CLI 공용)
-- `rag/llm.py`: 모델 생성
-- `rag/store.py`: 페이지와 청크를 `data/`에 JSON으로 저장
+- `portal/convert.py`: Word/한글 → PDF 변환, 변환 불가 시 텍스트 직접 추출
+- `portal/ocr.py`: 페이지 렌더링, RapidOCR, 레이아웃 복원, LLM 정리
+- `portal/ingest.py`: 수집 파이프라인 (전체 OCR → 청킹)
+- `portal/tools.py`: 단계별 도구 (OCR 재처리, 청킹, 검색)
+- `portal/agent.py`: `create_deep_agent` 정의, 최종 답변·출처 처리
+- `portal/stream.py`: 질문 처리 과정을 단계 이벤트로 스트리밍 (웹 SSE / CLI 공용)
+- `portal/llm.py`: 모델 생성
+- `portal/store.py`: 페이지와 청크를 `data/`에 JSON으로 저장
 - `web.py`, `static/index.html`: FastAPI 웹 UI
 - `main.py`: CLI

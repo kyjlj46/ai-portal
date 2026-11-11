@@ -2,7 +2,7 @@
 
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
-from rag import stream, tools
+from portal import stream, tools
 
 
 class FakeAgent:
@@ -16,7 +16,7 @@ class FakeAgent:
 
 
 def test_ask_stream_emits_steps_tokens_and_final(indexed_doc, sample_pdf, monkeypatch):
-    monkeypatch.setattr("rag.ingest.is_indexed", lambda doc_id: True)
+    monkeypatch.setattr("portal.ingest.is_indexed", lambda doc_id: True)
     search = tools.search_chunks.invoke({"query": "연구 인력", "doc_id": indexed_doc})
     call = AIMessage("", tool_calls=[{"name": "search_chunks", "args": {"query": "연구 인력"}, "id": "c1"}])
     events = [
@@ -46,7 +46,7 @@ def test_ask_stream_emits_steps_tokens_and_final(indexed_doc, sample_pdf, monkey
 
 
 def test_follow_up_question_gets_compact_history(indexed_doc, sample_pdf, monkeypatch):
-    monkeypatch.setattr("rag.ingest.is_indexed", lambda doc_id: True)
+    monkeypatch.setattr("portal.ingest.is_indexed", lambda doc_id: True)
     history: list = []
 
     def run(answer):
@@ -72,7 +72,7 @@ def test_follow_up_question_gets_compact_history(indexed_doc, sample_pdf, monkey
 
 
 def test_ask_stream_reports_errors(sample_pdf, monkeypatch):
-    monkeypatch.setattr("rag.ingest.is_indexed", lambda doc_id: True)
+    monkeypatch.setattr("portal.ingest.is_indexed", lambda doc_id: True)
 
     class Broken:
         def stream(self, *a, **k):
@@ -85,7 +85,7 @@ def test_ask_stream_reports_errors(sample_pdf, monkeypatch):
 
 
 def test_form_agent_without_document_skips_ingest_and_sources(monkeypatch):
-    monkeypatch.setattr("rag.ingest.is_indexed", lambda doc_id: (_ for _ in ()).throw(AssertionError("no ingest")))
+    monkeypatch.setattr("portal.ingest.is_indexed", lambda doc_id: (_ for _ in ()).throw(AssertionError("no ingest")))
     agent = FakeAgent([((), "updates", {"model": {"messages": [AIMessage("# 주간 보고\n- 진행률 80%")]}})])
     used = {}
     monkeypatch.setattr(stream, "get_agent", lambda agent_id="qa": used.setdefault("id", agent_id) and agent)
@@ -104,7 +104,7 @@ def test_document_outline_lists_pages(indexed_doc):
 
 
 def test_summary_preloads_short_document_but_keeps_history_compact(indexed_doc, sample_pdf, monkeypatch):
-    monkeypatch.setattr("rag.ingest.is_indexed", lambda doc_id: True)
+    monkeypatch.setattr("portal.ingest.is_indexed", lambda doc_id: True)
     agent = FakeAgent([((), "updates", {"model": {"messages": [AIMessage("## 한 줄 요약\n직원 512명 (p.1)")]}})])
     monkeypatch.setattr(stream, "get_agent", lambda *a: agent)
     history: list = []
@@ -117,7 +117,7 @@ def test_summary_preloads_short_document_but_keeps_history_compact(indexed_doc, 
 
 
 def test_qa_flow_shows_main_agent_with_tool_counts(indexed_doc, sample_pdf, monkeypatch):
-    monkeypatch.setattr("rag.ingest.is_indexed", lambda doc_id: True)
+    monkeypatch.setattr("portal.ingest.is_indexed", lambda doc_id: True)
     call = AIMessage("", tool_calls=[{"name": "search_chunks", "args": {"query": "a"}, "id": "c1"},
                                      {"name": "read_page", "args": {"page": 1}, "id": "c2"}])
     events = [((), "updates", {"model": {"messages": [call]}}),

@@ -1,7 +1,7 @@
 import pymupdf
 import pytest
 
-from rag import store, tools
+from portal import store, tools
 
 FONT = r"C:\Windows\Fonts\malgun.ttf"
 
@@ -15,7 +15,7 @@ PAGE1 = (
 def tmp_data_dir(tmp_path, monkeypatch):
     """테스트마다 별도 data 폴더를 써서 실제 data/ 를 건드리지 않는다."""
     monkeypatch.setattr(store, "DATA_DIR", tmp_path / "data")
-    from rag import stream
+    from portal import stream
 
     monkeypatch.setattr(stream, "RETRY_DELAY", 0)  # 재시도 대기 없이
     tools._bm25_index.cache_clear()

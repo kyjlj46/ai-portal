@@ -6,8 +6,8 @@
   - report   : 보고서 작성 (참고 문서 선택)
   - approval : 결재 기안문 작성 (참고 문서 선택)
   - news     : 뉴스 기사 초안 (신문사 논조 선택, 참고 문서 선택)
-  - image    : 이미지 분석 (OCR + LLM, rag/image_agent.py)
-  - omok     : 오목 미니게임 (규칙 기반 AI, rag/omok.py)
+  - image    : 이미지 분석 (OCR + LLM, portal/image_agent.py)
+  - omok     : 오목 미니게임 (규칙 기반 AI, portal/omok.py)
 화면용 정보(이름·설명·양식 필드)는 public() 으로 내보내고, 양식 입력은 compose() 가 요청문으로 바꾼다.
 """
 
@@ -312,7 +312,7 @@ AGENTS: dict[str, AgentSpec] = {
             description="스크린샷·사진·차트·표 이미지를 올리면 글자를 읽고 내용을 분석합니다. 이어서 질문할 수 있습니다.",
             doc="none",
             mode="image",
-            prompt=None,  # rag/image_agent.py 의 IMAGE_PROMPT 를 쓴다
+            prompt=None,  # portal/image_agent.py 의 IMAGE_PROMPT 를 쓴다
             opening="이미지 분석을 요청합니다.",
             intro="이미지를 끌어다 놓거나, 눌러서 고르거나, 붙여넣기(Ctrl+V) 하세요. 글자·표·수치를 읽어 분석합니다.",
             fields=[
@@ -330,7 +330,7 @@ AGENTS: dict[str, AgentSpec] = {
             description="AI와 15×15 판에서 오목을 둡니다. 흑·백과 난이도(쉬움·보통·어려움)를 고르고, 무르기도 됩니다.",
             doc="none",
             mode="game",
-            prompt=None,  # 규칙 기반 AI (rag/omok.py)
+            prompt=None,  # 규칙 기반 AI (portal/omok.py)
             intro="다섯 개를 먼저 잇는 쪽이 이깁니다 (자유룰 · 금수 없음). 흑이 먼저 둡니다.",
         ),
     ]

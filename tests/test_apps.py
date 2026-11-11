@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import web
-from rag import apps, catalog, market, stream
+from portal import apps, catalog, market, stream
 
 
 @pytest.fixture
@@ -74,7 +74,7 @@ def test_app_spec_orchestrates_team(client):
 
 
 def test_build_agent_attaches_market_subagents(client, monkeypatch):
-    from rag import agent
+    from portal import agent
 
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
     monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")
@@ -92,7 +92,7 @@ def test_build_agent_attaches_market_subagents(client, monkeypatch):
 def test_editing_app_rebuilds_cached_agent(client, monkeypatch):
     app = client.post("/api/apps", json=APP).json()
     built = []
-    monkeypatch.setattr("rag.agent.build_agent", lambda agent_id: built.append(agent_id) or object())
+    monkeypatch.setattr("portal.agent.build_agent", lambda agent_id: built.append(agent_id) or object())
     stream._agents.clear()
     a1 = stream.get_agent(f"app:{app['id']}")
     assert stream.get_agent(f"app:{app['id']}") is a1 and len(built) == 1  # 재사용
@@ -141,7 +141,7 @@ def test_task_step_shows_market_agent_name():
 
 
 def test_apps_dir_is_inside_data_dir(tmp_path):
-    from rag import store
+    from portal import store
 
     app = apps.save(APP)
     assert (store.DATA_DIR / "apps" / f"{app['id']}.json").exists()
@@ -271,7 +271,7 @@ def test_pipeline_step_failure_is_reported_and_others_continue(client, monkeypat
 
 
 def test_tool_stub_detection():
-    from rag.agent import is_tool_stub
+    from portal.agent import is_tool_stub
 
     assert is_tool_stub('{"description": "Translate the following text"}')
     assert is_tool_stub('{"subagent_type": "translator", "description": "x"}')
@@ -281,7 +281,7 @@ def test_tool_stub_detection():
 
 
 def test_unwrap_prose_fences_keeps_code():
-    from rag.agent import demote_headings, unwrap_prose_fences
+    from portal.agent import demote_headings, unwrap_prose_fences
 
     assert unwrap_prose_fences("```\n안녕하세요 팀원 여러분\n```") == "안녕하세요 팀원 여러분"
     sql = "```sql\nSELECT 1;\n```"
@@ -366,7 +366,7 @@ def test_step_retries_up_to_three_times(client, monkeypatch):
 def test_final_answer_retries_then_reports(monkeypatch):
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from rag import agent
+    from portal import agent
 
     replies = iter(["", '{"description": "x"}', "## 답"])
 
@@ -401,7 +401,7 @@ def test_orchestrator_loop_is_capped(client, monkeypatch):
                 yield (), "updates", {"tools": {"messages": [ToolMessage(f"회의록 {i}", tool_call_id=f"t{i}", name="task")]}}
 
     monkeypatch.setattr(stream, "get_agent", lambda agent_id: Looping())
-    monkeypatch.setattr("rag.agent._model", lambda env: type("M", (), {"invoke": lambda self, m: AIMessage("## 지금까지 결과 정리")})())
+    monkeypatch.setattr("portal.agent._model", lambda env: type("M", (), {"invoke": lambda self, m: AIMessage("## 지금까지 결과 정리")})())
     out = list(stream.ask_stream(None, "메모", None, agent_id=f"app:{app['id']}"))
     assert len(produced) == stream.TASK_CAP_PER_AGENT + 1  # 한도를 넘는 순간 멈춘다
     final = out[-1]
@@ -420,7 +420,7 @@ def test_pipeline_final_has_flow_with_parallel_group(client, monkeypatch):
     app = client.post("/api/apps", json={**APP, "agents": ["translator", "sentiment", "keywords"]}).json()
     monkeypatch.setattr(stream, "get_agent", lambda agent_id: StepAgent(agent_id))
     flow = _run(app["id"], "기사")[-1]["flow"]
-    from rag.market import BY_ID
+    from portal.market import BY_ID
 
     assert _names(flow) == [[BY_ID["translator"].name], [BY_ID["sentiment"].name, BY_ID["keywords"].name]]
     assert [s["parallel"] for s in flow] == [False, True]

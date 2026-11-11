@@ -20,14 +20,14 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from rag import store  # noqa: E402
-from rag.convert import SUPPORTED_EXTS  # noqa: E402
-from rag.llm import check_config  # noqa: E402
+from portal import store  # noqa: E402
+from portal.convert import SUPPORTED_EXTS  # noqa: E402
+from portal.llm import check_config  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT / "uploads"
 
-app = FastAPI(title="PDF RAG Agent")
+app = FastAPI(title="AI Portal")
 
 class AskRequest(BaseModel):
     pdf_path: str
@@ -152,7 +152,7 @@ def documents():
 
 def run_agent(pdf_path: str, question: str) -> dict:
     """문서를 수집(OCR·인덱싱)한 뒤 에이전트를 실행하고, 최종 답변 + 출처 + 처리 단계를 돌려준다."""
-    from rag.stream import ask_stream
+    from portal.stream import ask_stream
 
     for ev in ask_stream(pdf_path, question):
         if ev["type"] == "final":
@@ -202,7 +202,7 @@ def ask(req: AskRequest):
 @app.delete("/api/conversations/{conv_id}")
 def delete_conversation(conv_id: str):
     """새 대화를 시작할 때 이전 대화 기록을 지운다 (모든 에이전트·앱에서)."""
-    from rag.stream import forget_conversation
+    from portal.stream import forget_conversation
 
     forget_conversation(conv_id)
     return {"ok": True}
@@ -210,7 +210,7 @@ def delete_conversation(conv_id: str):
 
 def _sse(path: str | list[str] | None, question: str, conversation_id: str | None, agent_id: str = "qa",
          resume: dict | None = None) -> StreamingResponse:
-    from rag.stream import ask_stream, conversation
+    from portal.stream import ask_stream, conversation
 
     history = conversation(f"{agent_id}:{conversation_id}") if conversation_id else None
 
@@ -241,7 +241,7 @@ class RunRequest(BaseModel):
     conversation_id: str | None = None
     image_id: str | None = None  # 이미지 분석 에이전트
     image_name: str | None = None
-    resume: "ResumeRequest | None" = None  # 질의자 확인 질문에 대한 답 → 멈춘 자리에서 이어서 (rag.hitl)
+    resume: "ResumeRequest | None" = None  # 질의자 확인 질문에 대한 답 → 멈춘 자리에서 이어서 (portal.hitl)
 
 
 class ResumeRequest(BaseModel):
@@ -255,10 +255,10 @@ RunRequest.model_rebuild()
 @app.get("/api/status")
 def status():
     """왼쪽 메뉴 하단에 보여줄 모델 상태 (키·주소 같은 비밀값은 내보내지 않는다)."""
-    from rag.image_agent import vision_enabled
-    from rag.llm import default_model_name, llm_streaming
+    from portal.image_agent import vision_enabled
+    from portal.llm import default_model_name, llm_streaming
 
-    from rag.mailer import public_status
+    from portal.mailer import public_status
 
     return {
         "model": os.getenv("RAG_MODEL") or default_model_name(),
@@ -281,7 +281,7 @@ class EmailRequest(BaseModel):
 @app.post("/api/email/send")
 def send_email(req: EmailRequest):
     """사용자가 확인한 메일 초안을 SMTP 로 보낸다. 에이전트가 이 API 를 부르는 경로는 없다."""
-    from rag import mailer
+    from portal import mailer
 
     if not req.confirm:
         raise HTTPException(400, "보내기 전에 받는 사람과 내용을 확인해 주세요.")
@@ -298,7 +298,7 @@ def send_email(req: EmailRequest):
 @app.get("/api/market")
 def market():
     """Agent 마켓: 단독 실행하거나 커스텀 앱에 담을 수 있는 에이전트 목록."""
-    from rag import market as m
+    from portal import market as m
 
     return {"categories": m.CATEGORIES, "agents": m.public()}
 
@@ -325,7 +325,7 @@ class CustomAgentRequest(BaseModel):
 @app.post("/api/custom-agents/design")
 def design_agent(req: AgentDesignRequest):
     """gpt-oss 로 Agent 를 설계한다 (저장하지 않음 — 화면에서 확인·수정 후 저장)."""
-    from rag import custom_agents
+    from portal import custom_agents
 
     if err := check_config():
         raise HTTPException(500, err)
@@ -337,14 +337,14 @@ def design_agent(req: AgentDesignRequest):
 
 @app.get("/api/custom-agents")
 def list_custom_agents():
-    from rag import custom_agents
+    from portal import custom_agents
 
     return custom_agents.list_all()
 
 
 @app.get("/api/custom-agents/{agent_id}")
 def get_custom_agent(agent_id: str):
-    from rag import custom_agents
+    from portal import custom_agents
 
     try:
         return custom_agents.get(agent_id)
@@ -354,7 +354,7 @@ def get_custom_agent(agent_id: str):
 
 @app.post("/api/custom-agents")
 def create_custom_agent(req: CustomAgentRequest):
-    from rag import custom_agents
+    from portal import custom_agents
 
     try:
         return custom_agents.save(req.model_dump())
@@ -364,7 +364,7 @@ def create_custom_agent(req: CustomAgentRequest):
 
 @app.put("/api/custom-agents/{agent_id}")
 def update_custom_agent(agent_id: str, req: CustomAgentRequest):
-    from rag import custom_agents
+    from portal import custom_agents
 
     try:
         return custom_agents.save(req.model_dump(), agent_id)
@@ -376,7 +376,7 @@ def update_custom_agent(agent_id: str, req: CustomAgentRequest):
 
 @app.delete("/api/custom-agents/{agent_id}")
 def delete_custom_agent(agent_id: str):
-    from rag import custom_agents
+    from portal import custom_agents
 
     try:
         custom_agents.delete(agent_id)
@@ -401,14 +401,14 @@ class AppRequest(BaseModel):
 
 @app.get("/api/apps")
 def list_apps():
-    from rag import apps
+    from portal import apps
 
     return apps.list_apps()
 
 
 @app.post("/api/apps")
 def create_app(req: AppRequest):
-    from rag import apps
+    from portal import apps
 
     try:
         return apps.save(req.model_dump())
@@ -418,7 +418,7 @@ def create_app(req: AppRequest):
 
 @app.get("/api/apps/{app_id}")
 def get_app(app_id: str):
-    from rag import apps
+    from portal import apps
 
     try:
         return apps.get(app_id)
@@ -428,7 +428,7 @@ def get_app(app_id: str):
 
 @app.put("/api/apps/{app_id}")
 def update_app(app_id: str, req: AppRequest):
-    from rag import apps
+    from portal import apps
 
     try:
         return apps.save(req.model_dump(), app_id)
@@ -440,7 +440,7 @@ def update_app(app_id: str, req: AppRequest):
 
 @app.delete("/api/apps/{app_id}")
 def delete_app(app_id: str):
-    from rag import apps
+    from portal import apps
 
     try:
         apps.delete(app_id)
@@ -451,7 +451,7 @@ def delete_app(app_id: str):
 
 @app.get("/api/agents")
 def agents():
-    from rag.catalog import public
+    from portal.catalog import public
 
     return public()
 
@@ -459,7 +459,7 @@ def agents():
 @app.post("/api/agents/{agent_id}/stream")
 def agent_stream(agent_id: str, req: RunRequest):
     """카드의 에이전트를 실행한다. inputs(양식) 또는 question(자유 입력) 중 하나는 있어야 한다."""
-    from rag.catalog import compose, get
+    from portal.catalog import compose, get
 
     try:
         spec = get(agent_id)
@@ -475,7 +475,7 @@ def agent_stream(agent_id: str, req: RunRequest):
         if err := check_config():
             raise HTTPException(500, err)
         return _sse(None, "", req.conversation_id, agent_id, resume=req.resume.model_dump())
-    from rag.multidoc import MAX_DOCS
+    from portal.multidoc import MAX_DOCS
 
     paths = list(dict.fromkeys(req.pdf_paths or ([req.pdf_path] if req.pdf_path else [])))
     if spec.doc == "none":
@@ -499,9 +499,9 @@ def agent_stream(agent_id: str, req: RunRequest):
 
 
 def _image_sse(req: RunRequest) -> StreamingResponse:
-    from rag import image_agent
-    from rag.catalog import compose
-    from rag.stream import conversation
+    from portal import image_agent
+    from portal.catalog import compose
+    from portal.stream import conversation
 
     if not req.image_id:
         raise HTTPException(400, "먼저 이미지를 올려 주세요.")
@@ -532,7 +532,7 @@ def _image_sse(req: RunRequest) -> StreamingResponse:
 
 @app.post("/api/images")
 async def upload_image(file: UploadFile = File(...)):
-    from rag import image_agent
+    from portal import image_agent
 
     data = await file.read()
     if len(data) > 20 * 1024 * 1024:
@@ -545,7 +545,7 @@ async def upload_image(file: UploadFile = File(...)):
 
 @app.get("/api/images/{image_id}")
 def get_image(image_id: str):
-    from rag import image_agent
+    from portal import image_agent
 
     try:
         return FileResponse(image_agent.image_path(image_id), headers={"Cache-Control": "max-age=3600"})
@@ -562,7 +562,7 @@ class OmokRequest(BaseModel):
 @app.post("/api/omok/move")
 def omok_move(req: OmokRequest):
     """사람이 둔 뒤의 판을 받아 승부를 판정하고, 끝나지 않았으면 AI 가 한 수 둔다."""
-    from rag import omok
+    from portal import omok
 
     if err := omok.validate(req.board):
         raise HTTPException(400, err)
@@ -584,7 +584,7 @@ def export_docx(req: ExportRequest):
     """에이전트 결과를 Word 파일로 내려준다."""
     from urllib.parse import quote
 
-    from rag.export import markdown_to_docx
+    from portal.export import markdown_to_docx
 
     name = re.sub(r'[\\/:*?"<>|\s]+', "_", req.title).strip("_")[:60] or "문서"
     return Response(

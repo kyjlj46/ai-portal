@@ -60,7 +60,7 @@ def test_page_image(client, indexed_doc):
 def test_ask_stream_sends_sse_events(client, sample_pdf, monkeypatch):
     import json
 
-    from rag import stream
+    from portal import stream
 
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
     monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")
@@ -114,7 +114,7 @@ def test_agent_stream_validates(client, monkeypatch):
 def test_agent_stream_composes_form_without_document(client, monkeypatch):
     import json
 
-    from rag import stream
+    from portal import stream
 
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
     monkeypatch.setenv("OPENAI_API_BASE", "http://localhost/v1")
@@ -164,7 +164,7 @@ def _png_bytes():
 def test_image_upload_serve_and_analyze(client, tmp_path, monkeypatch):
     import json
 
-    from rag import image_agent
+    from portal import image_agent
 
     monkeypatch.setattr(image_agent, "IMAGE_DIR", tmp_path / "images")
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
@@ -191,7 +191,7 @@ def test_image_upload_serve_and_analyze(client, tmp_path, monkeypatch):
     assert events[-1]["answer"] == "## 분석"
     assert seen["image_id"] == meta["image_id"] and seen["filename"] == "표.png"
     assert seen["question"].startswith("이미지 분석을 요청합니다.") and "- 분석 관점: 표·차트 해석" in seen["question"]
-    from rag import stream
+    from portal import stream
 
     assert seen["history"] is stream.conversation(f"image:c1:{meta['image_id']}")
     client.delete("/api/conversations/c1")  # 이미지별 하위 기록도 함께 지운다
@@ -201,11 +201,11 @@ def test_image_upload_serve_and_analyze(client, tmp_path, monkeypatch):
 def test_image_stream_uses_ocr_context_and_keeps_history(tmp_path, monkeypatch):
     from langchain_core.messages import AIMessage
 
-    from rag import image_agent
+    from portal import image_agent
 
     monkeypatch.setattr(image_agent, "IMAGE_DIR", tmp_path / "images")
     meta = image_agent.save_image(_png_bytes(), "a.png")
-    monkeypatch.setattr("rag.ocr.detect_boxes", lambda png: [
+    monkeypatch.setattr("portal.ocr.detect_boxes", lambda png: [
         {"x0": 0, "y0": 0, "x1": 50, "y1": 10, "text": "매출 합계", "score": 0.9},
         {"x0": 200, "y0": 0, "x1": 250, "y1": 10, "text": "4,050", "score": 0.95}])
     sent = []
@@ -229,7 +229,7 @@ def test_image_stream_uses_ocr_context_and_keeps_history(tmp_path, monkeypatch):
 
 
 def test_omok_move_api(client):
-    from rag import omok
+    from portal import omok
 
     board = omok.empty_board()
     res = client.post("/api/omok/move", json={"board": board, "ai": 1, "level": "보통"}).json()
@@ -252,7 +252,7 @@ def test_omok_move_api(client):
 
 
 def test_news_compose_includes_outlet_tone_guide():
-    from rag.catalog import OUTLET_STYLES, OUTLET_TONES, compose, get
+    from portal.catalog import OUTLET_STYLES, OUTLET_TONES, compose, get
 
     q = compose("news", {"outlet": "한겨레", "kind": "사설", "topic": "AI 예산 증액", "facts": "1조 2천억 원"})
     assert q.startswith("뉴스 기사 초안 작성을 요청합니다.")

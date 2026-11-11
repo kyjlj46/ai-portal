@@ -245,7 +245,7 @@ def image_stream(image_id: str, question: str, history: list | None = None, file
                 history.extend([human, AIMessage(answer)])
             if len(history) > 2 * MAX_TURNS:  # 맨 앞(이미지 맥락)은 남기고 중간 턴을 버린다
                 del history[2 : len(history) - 2 * (MAX_TURNS - 1)]
-        flow = []  # 처리 흐름 (답변 끝 표시, rag.stream.Flow 와 같은 모양)
+        flow = []  # 처리 흐름 (답변 끝 표시, portal.stream.Flow 와 같은 모양)
         if first:
             flow.append({"parallel": False, "items": [{"icon": "🔤", "name": "글자 인식 (OCR)", "status": "ok",
                                                          "note": f"글자 상자 {info['boxes']}개", "sec": t_read}]})

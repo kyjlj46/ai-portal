@@ -1,6 +1,6 @@
 """deep-agents 로 구성한 PDF 질의응답 에이전트.
 
-문서 수집(OCR → 청킹)은 rag.ingest 가 코드로 먼저 끝내고, 에이전트는 검색과 답변만 맡는다.
+문서 수집(OCR → 청킹)은 portal.ingest 가 코드로 먼저 끝내고, 에이전트는 검색과 답변만 맡는다.
 메인 에이전트가 검색 도구를 직접 쓰고, 질문이 여러 갈래면 retrieval-agent 에 나눠 맡길 수 있다.
 """
 
@@ -82,7 +82,7 @@ def build_agent(agent_id: str = "qa"):
 
     return create_deep_agent(
         model=main_model,
-        tools=DOC_TOOLS + extra_tools(spec.extra_tools) + [ask_user],  # ask_user: 모호하면 질의자에게 묻는다 (rag.hitl)
+        tools=DOC_TOOLS + extra_tools(spec.extra_tools) + [ask_user],  # ask_user: 모호하면 질의자에게 묻는다 (portal.hitl)
         system_prompt=(spec.prompt or MAIN_PROMPT) + CLARIFY_RULE,  # CLARIFY_RULE 은 줄바꿈으로 시작한다
         subagents=subagents,
     )

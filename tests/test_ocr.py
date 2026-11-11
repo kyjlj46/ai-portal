@@ -2,7 +2,7 @@
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from rag import agent, ingest, ocr, store, tools
+from portal import agent, ingest, ocr, store, tools
 
 
 def _box(x0, y0, x1, y1, text, score=0.9):

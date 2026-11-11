@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import web
-from rag import mailer
+from portal import mailer
 
 
 class FakeSMTP:

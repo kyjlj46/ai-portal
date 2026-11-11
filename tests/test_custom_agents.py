@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
 import web
-from rag import catalog, custom_agents, market, stream
+from portal import catalog, custom_agents, market, stream
 
 DESIGN = {
     "name": "계약리스크", "icon": "📄", "category": "문서", "description": "불리한 조항을 찾아 표로 정리",

@@ -37,7 +37,7 @@ class MarketAgent:
     preload: bool | None = None  # 짧은 문서 전문을 요청에 붙일지 (None 이면 uses_doc 을 따른다)
     on_upload: str = ""  # 이 화면에서 문서를 올리거나 고르면 바로 보낼 요청 (비우면 사용자가 직접 요청)
     parallel: bool = False  # '순서대로' 실행에서 이웃한 병렬 가능 Agent 와 동시에 돌려도 되는지 (앞 결과만 읽는 분석형)
-    custom: bool = False  # 사용자가 만든 Agent (rag/custom_agents.py)
+    custom: bool = False  # 사용자가 만든 Agent (portal/custom_agents.py)
     version: str = ""  # 바뀌면 만들어 둔 에이전트를 다시 만든다 (편집)
 
 
