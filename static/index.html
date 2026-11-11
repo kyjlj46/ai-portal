@@ -102,7 +102,7 @@
   .mk-card .cat { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; flex: none; }
   .mk-card p { margin: 6px 0 8px; font-size: 12.5px; color: var(--muted); line-height: 1.5;
                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .mk-card .acts { display: flex; gap: 6px; }
+  .mk-card .acts { display: flex; flex-wrap: wrap; gap: 6px; }
   .mk-card .acts .btn { font-size: 12px; padding: 3px 10px; }
   .mk-card .acts .btn.added { color: var(--muted); }
   .mk-empty { color: var(--muted); font-size: 13px; padding: 12px 4px; }
@@ -561,7 +561,7 @@
     <h2>🧩 Agent 마켓</h2>
     <button class="iconbtn" id="marketClose" title="마켓 닫기" aria-label="마켓 닫기">✕</button>
   </div>
-  <p class="mk-sub">바로 <b>사용</b>하거나, 끌어다 놓거나 <b>＋ 담기</b>로 나만의 앱을 만드세요.</p>
+  <p class="mk-sub">바로 <b>사용</b>하거나, 끌어다 놓거나 <b>＋ 담기</b>로 나만의 앱을 만드세요. 자주 쓰는 Agent 는 <b>📌 홈에 추가</b>.</p>
   <input class="mk-search" id="mkSearch" type="search" placeholder="Agent 검색 (예: 번역, 메일)" aria-label="Agent 검색">
   <div class="mk-cats" id="mkCats" role="group" aria-label="분류"></div>
   <ul class="mk-list" id="mkList"></ul>
@@ -694,10 +694,34 @@ const TAGS = {
   doc: (a) => ({ required: "문서 필요", optional: "참고 문서 선택", none: a.mode === "image" ? "이미지 업로드" : "바로 시작" }[a.doc]),
   mode: (a) => ({ chat: "채팅", form: "양식 작성 → 수정 요청", image: "분석 → 이어서 질문", game: "미니게임 · AI 대전" }[a.mode]),
 };
+// ── 메인 화면에 고정한 마켓 Agent (📌 홈에 추가) ──
+const PIN_GROUP = "📌 고정한 Agent";
+let pins = [];
+async function loadPins() { try { pins = (await (await fetch("/api/home/pins")).json()).pins || []; } catch { pins = []; } }
+function pinnedAgents() {
+  return pins.map(id => market.find(m => m.id === id)).filter(m => m && !m.route)
+             .map(m => ({ ...marketAgent(m), group: PIN_GROUP, pinId: m.id }));
+}
+async function togglePin(m) {
+  const on = pins.includes(m.id);
+  try {
+    const res = await fetch(`/api/home/pins/${encodeURIComponent(m.id)}`, { method: on ? "DELETE" : "PUT" });
+    const data = await res.json();
+    if (!res.ok) { toast(`⚠ ${data.detail || "메인 화면에 추가하지 못했습니다."}`); return; }
+    pins = data.pins;
+    toast(on ? `${m.icon} ${m.name} 을(를) 메인 화면에서 뺐습니다.` : `📌 ${m.icon} ${m.name} 을(를) 메인 화면에 추가했습니다.`);
+  } catch { toast("⚠ 서버에 연결하지 못했습니다."); return; }
+  renderMarket();
+  renderNav(navActive);
+  if (!$("home").hidden) renderHome();
+}
+
 function groups() {
   const out = new Map();
-  for (const a of navAgents()) { if (!out.has(a.group)) out.set(a.group, []); out.get(a.group).push(a); }
-  if (!out.has("내 앱")) out.set("내 앱", []);  // 앱이 없어도 '새 앱 만들기' 자리는 보인다
+  const add = (a) => { if (!out.has(a.group)) out.set(a.group, []); out.get(a.group).push(a); };
+  agents.forEach(add);
+  pinnedAgents().forEach(add);
+  out.set("내 앱", apps.map(appAgent));  // 앱이 없어도 '새 앱 만들기' 자리는 보인다
   return out;
 }
 
@@ -721,6 +745,14 @@ function renderHome() {
         const wrap = el("div", "cardwrap");
         wrap.append(c, editLink(a, "card-edit", "✏️ 편집"));
         grid.append(wrap);
+      } else if (a.pinId) {  // 고정한 마켓 Agent: 모서리에 빼기 버튼
+        const wrap = el("div", "cardwrap");
+        const un = el("button", "card-edit", "✕ 빼기");
+        un.title = `${a.name} 을(를) 메인 화면에서 빼기`;
+        un.setAttribute("aria-label", un.title);
+        un.onclick = () => togglePin(market.find(m => m.id === a.pinId));
+        wrap.append(c, un);
+        grid.append(wrap);
       } else grid.append(c);
     }
     if (name === "내 앱") {
@@ -736,7 +768,9 @@ function renderHome() {
 }
 
 // ── 왼쪽 메뉴 ──
+let navActive = "home";  // 고정 목록이 바뀌면 같은 선택 상태로 다시 그린다
 function renderNav(activeId) {
+  navActive = activeId;
   const nav = $("nav");
   nav.replaceChildren();
   const item = (href, icon, label, on) => {
@@ -984,6 +1018,14 @@ function renderMarket() {
     add.disabled = !!inTeam;
     add.onclick = () => addToTeam(m.id);
     acts.append(use, add);
+    // 📌 메인 화면에 추가 (기존 카드가 있는 항목은 이미 홈에 있다)
+    const pinned = !m.route && pins.includes(m.id);
+    const pin = el("button", "btn" + (m.route || pinned ? " added" : ""), m.route ? "🏠 홈에 있음" : pinned ? "📌 홈에서 빼기" : "📌 홈에 추가");
+    pin.title = m.route ? "기본 카드로 이미 메인 화면에 있습니다" : pinned ? `${m.name} 을(를) 메인 화면에서 빼기` : `${m.name} 을(를) 메인 화면 버튼으로 추가`;
+    pin.setAttribute("aria-pressed", String(pinned));
+    pin.disabled = !!m.route;
+    pin.onclick = () => togglePin(m);
+    acts.append(pin);
     if (m.custom) {  // 내가 만든 Agent: 편집
       const edit = el("a", "btn", "✏️ 편집"); edit.href = `#/maker/${m.id}`;
       edit.setAttribute("aria-label", `${m.name} 편집`);
@@ -2592,7 +2634,7 @@ $("send").onclick = send;
 (async () => {
   agents = await (await fetch("/api/agents")).json();
   await loadMarket();
-  await loadApps();
+  await Promise.all([loadApps(), loadPins()]);
   await loadDocs();
   route();
   updateSend();

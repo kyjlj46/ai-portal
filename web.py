@@ -470,6 +470,33 @@ def delete_app(app_id: str):
     return {"ok": True}
 
 
+@app.get("/api/home/pins")
+def home_pins():
+    """메인 화면에 고정한 마켓 Agent id 목록."""
+    from portal import home
+
+    return {"pins": home.pins()}
+
+
+@app.put("/api/home/pins/{item_id}")
+def pin_to_home(item_id: str):
+    from portal import home
+
+    try:
+        return {"pins": home.pin(item_id)}
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+@app.delete("/api/home/pins/{item_id}")
+def unpin_from_home(item_id: str):
+    from portal import home
+
+    return {"pins": home.unpin(item_id)}
+
+
 @app.get("/api/agents")
 def agents():
     from portal.catalog import public
