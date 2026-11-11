@@ -202,3 +202,15 @@ def test_second_ocr_pass_only_fills_missed_lines():
         {"x0": 0, "y0": 200, "x1": 100, "y1": 230, "text": "흐릿한글", "score": 0.5},  # 낮은 신뢰도 → 버림
     ]
     assert [b["text"] for b in merge_missing(base, extra)] == ["결제일 2026-11-10", "합계 금액 12,000원"]
+
+
+def test_code_assistant_in_market_and_reads_source_files(tmp_path):
+    item = market.BY_ID["code_assistant"]
+    assert item.category == "개발" and item.uses_doc and not item.tools
+    assert "```python" in item.prompt and "코드 리뷰" in item.prompt
+    spec = catalog.get("m:code_assistant")
+    assert spec.doc == "optional" and spec.preload  # 올린 소스 파일은 전문을 요청에 붙인다
+    src = tmp_path / "app.py"
+    src.write_bytes(b"def add(a, b):\n    return a + b\n")
+    assert convert.kind_of(src) == "text" and ".java" in convert.SUPPORTED_EXTS
+    assert convert.extract_segments(src) == ["def add(a, b):\n    return a + b"]

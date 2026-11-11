@@ -13,7 +13,7 @@ import time
 
 from . import store
 
-ALLOWED_TOOLS = {"web_search": "웹 검색", "fetch_url": "웹 페이지 읽기"}
+ALLOWED_TOOLS = {"web_search": "웹 검색", "fetch_url": "웹 페이지 읽기", "crawl_site": "사이트 크롤링"}
 MAX_PROMPT = 6000
 
 DESIGN_PROMPT = """당신은 업무용 AI Agent 설계자입니다. 사용자가 원하는 Agent 설명을 보고, 그 Agent 의 정의를 JSON 하나로만 출력합니다.

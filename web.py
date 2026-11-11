@@ -242,6 +242,27 @@ class RunRequest(BaseModel):
     image_id: str | None = None  # 이미지 분석 에이전트
     image_name: str | None = None
     resume: "ResumeRequest | None" = None  # 질의자 확인 질문에 대한 답 → 멈춘 자리에서 이어서 (portal.hitl)
+    urls: list[str] | None = None  # URL 입력창 (웹 크롤링 Agent · 그 Agent 를 담은 앱) → 요청문 맨 앞에 붙인다
+
+
+MAX_URLS = 5
+
+
+def with_urls(question: str, urls: list[str] | None) -> str:
+    """URL 입력창의 주소를 요청문 맨 앞 [크롤링할 URL] 로 붙인다. 요청이 비면 기본 요청을 쓴다. 잘못된 주소는 ValueError."""
+    from urllib.parse import urlparse
+
+    clean = list(dict.fromkeys(u.strip() for u in urls or [] if u.strip()))
+    if not clean:
+        return question
+    if len(clean) > MAX_URLS:
+        raise ValueError(f"URL 은 한 번에 {MAX_URLS}개까지 넣을 수 있습니다.")
+    for u in clean:
+        p = urlparse(u)
+        if p.scheme not in ("http", "https") or not p.netloc or len(u) > 2000:
+            raise ValueError(f"http:// 또는 https:// 로 시작하는 웹 주소를 넣어 주세요: {u[:100]}")
+    head = "[크롤링할 URL]\n" + "\n".join(f"- {u}" for u in clean)
+    return f"{head}\n\n{question or '이 페이지의 내용을 정리해 주세요.'}"
 
 
 class ResumeRequest(BaseModel):
@@ -489,6 +510,7 @@ def agent_stream(agent_id: str, req: RunRequest):
         raise HTTPException(400, f"{spec.name}은(는) 문서가 필요합니다. 위에서 문서를 고르거나 올려 주세요.")
     try:
         question = compose(agent_id, req.inputs) if req.inputs else (req.question or "").strip()
+        question = with_urls(question, req.urls)
     except ValueError as e:
         raise HTTPException(400, str(e)) from None
     if not question:

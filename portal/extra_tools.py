@@ -1,4 +1,4 @@
-"""마켓 Agent 전용 도구: 청킹 점검, OCR 점검·재인식, 웹 검색·페이지 읽기.
+"""마켓 Agent 전용 도구: 청킹 점검, OCR 점검·재인식, 웹 검색·페이지 읽기·사이트 크롤링.
 
 TOOLS 의 이름으로 market.MarketAgent.tools 에서 고른다.
 """
@@ -185,10 +185,13 @@ class _TextExtractor(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
         self.title = ""
+        self.links: list[str] = []  # <a href> 그대로 (메뉴 안의 링크도 크롤링에는 쓸모 있어 모은다)
         self._skip = 0
         self._in_title = False
 
     def handle_starttag(self, tag, attrs):
+        if tag == "a" and (href := dict(attrs).get("href")):
+            self.links.append(href)
         if tag in self.SKIP:
             self._skip += 1
         elif tag == "title":
@@ -216,12 +219,13 @@ class _TextExtractor(HTMLParser):
         return "\n".join(ln for ln in lines if len(ln) > 1)
 
 
-@tool
-def fetch_url(url: str, max_chars: int = 6000) -> str:
-    """웹 페이지를 읽어 본문 텍스트를 돌려준다 (http/https 공개 주소만)."""
+USER_AGENT = "Mozilla/5.0 (compatible; work-agent/1.0)"
+
+
+def _fetch_page(url: str) -> dict | str:
+    """공개 http/https 페이지를 읽는다 → {url(리디렉션 후), title, text, links(절대 주소), plain} 또는 실패 사유 문자열."""
     import httpx
 
-    max_chars = max(500, min(int(max_chars), 15000))
     for _ in range(4):  # 리디렉션은 직접 따라가며 주소를 매번 다시 검사한다
         if urlparse(url).scheme not in ("http", "https"):
             return "http/https 주소만 읽을 수 있습니다."
@@ -229,7 +233,7 @@ def fetch_url(url: str, max_chars: int = 6000) -> str:
             return "내부망·사설 주소는 읽을 수 없습니다."
         try:
             with httpx.stream("GET", url, timeout=12, follow_redirects=False,
-                              headers={"User-Agent": "Mozilla/5.0 (compatible; work-agent/1.0)", "Accept-Language": "ko,en;q=0.8"}) as res:
+                              headers={"User-Agent": USER_AGENT, "Accept-Language": "ko,en;q=0.8"}) as res:
                 if res.is_redirect and "location" in res.headers:
                     url = urljoin(url, res.headers["location"])
                     continue
@@ -248,12 +252,114 @@ def fetch_url(url: str, max_chars: int = 6000) -> str:
             return f"페이지를 읽지 못했습니다 ({type(e).__name__})."
         html = body.decode(enc, errors="replace")
         if "text/plain" in ctype:
-            return f"{url}\n{html[:max_chars]}"
+            return {"url": url, "title": "", "text": html, "links": [], "plain": True}
         parser = _TextExtractor()
         parser.feed(html)
-        text = parser.text()
-        return f"[{parser.title.strip()[:120]}] {url}\n{text[:max_chars]}" + ("\n…(이하 생략)" if len(text) > max_chars else "")
+        links = [urljoin(url, h).split("#")[0] for h in parser.links]
+        return {"url": url, "title": parser.title.strip()[:120], "text": parser.text(), "links": links, "plain": False}
     return "리디렉션이 너무 많습니다."
 
 
-TOOLS = {t.name: t for t in (chunk_stats, preview_chunks, chunk_document, ocr_report, reocr_pages, web_search, fetch_url)}
+@tool
+def fetch_url(url: str, max_chars: int = 6000) -> str:
+    """웹 페이지를 읽어 본문 텍스트를 돌려준다 (http/https 공개 주소만)."""
+    max_chars = max(500, min(int(max_chars), 15000))
+    page = _fetch_page(url)
+    if isinstance(page, str):
+        return page
+    if page["plain"]:
+        return f"{page['url']}\n{page['text'][:max_chars]}"
+    text = page["text"]
+    return f"[{page['title']}] {page['url']}\n{text[:max_chars]}" + ("\n…(이하 생략)" if len(text) > max_chars else "")
+
+
+# ─────────────────────────── 크롤링 ───────────────────────────
+
+MAX_CRAWL_PAGES = 10
+_SKIP_EXT = re.compile(r"\.(pdf|zip|rar|7z|gz|tar|exe|msi|dmg|apk|jpe?g|png|gif|webp|svg|ico|bmp|mp[34]|avi|mov|wmv|"
+                       r"docx?|xlsx?|pptx?|hwpx?|css|js|json|xml|rss|woff2?|ttf)$", re.I)
+
+
+def _robots(start: str):
+    """시작 주소 사이트의 robots.txt → 허용 여부 함수. 못 읽으면 모두 허용 (robots.txt 가 없는 사이트가 많다)."""
+    from urllib.robotparser import RobotFileParser
+
+    import httpx
+
+    p = urlparse(start)
+    robots_url = f"{p.scheme}://{p.netloc}/robots.txt"
+    rp = RobotFileParser()
+    try:
+        if not _public_host(robots_url):
+            return lambda url: True
+        res = httpx.get(robots_url, timeout=6, follow_redirects=False, headers={"User-Agent": USER_AGENT})
+        if res.status_code >= 400:
+            return lambda url: True
+        rp.parse(res.text.splitlines())
+    except Exception:  # noqa: BLE001 - robots.txt 를 못 읽으면 막지 않는다
+        return lambda url: True
+    return lambda url: rp.can_fetch(USER_AGENT, url)
+
+
+def _crawlable(url: str, host: str, prefix: str) -> bool:
+    p = urlparse(url)
+    return (p.scheme in ("http", "https") and p.hostname == host and p.path.startswith(prefix)
+            and not _SKIP_EXT.search(p.path))
+
+
+@tool
+def crawl_site(url: str, max_pages: int = 5, same_path: bool = False, chars_per_page: int = 2500) -> str:
+    """시작 주소에서 같은 사이트 안의 링크를 따라가며 여러 페이지를 읽는다 (너비 우선, 최대 10페이지).
+
+    same_path=True 면 시작 주소의 경로 아래(예: /notice/ 아래)만 읽는다. robots.txt 가 막은 페이지는 읽지 않는다.
+    한 페이지만 필요하면 fetch_url 을 쓴다.
+    """
+    max_pages = max(1, min(int(max_pages), MAX_CRAWL_PAGES))
+    chars_per_page = max(300, min(int(chars_per_page), 5000))
+    first = _fetch_page(url)
+    if isinstance(first, str):
+        return f"시작 페이지를 읽지 못했습니다: {first}"
+    start = first["url"]
+    host = urlparse(start).hostname
+    path = urlparse(start).path
+    prefix = path[: path.rfind("/") + 1] if same_path else "/"
+    allowed = _robots(start)
+
+    pages, failed, blocked = [first], [], 0
+    seen = {start, url}
+    queue = [u for u in dict.fromkeys(first["links"]) if _crawlable(u, host, prefix)]
+    while queue and len(pages) < max_pages:
+        nxt = queue.pop(0)
+        if nxt in seen:
+            continue
+        seen.add(nxt)
+        if not allowed(nxt):
+            blocked += 1
+            continue
+        page = _fetch_page(nxt)
+        if isinstance(page, str):
+            failed.append(f"{nxt} — {page}")
+            continue
+        if page["url"] in seen and page["url"] != nxt:  # 리디렉션으로 이미 읽은 곳에 도착
+            continue
+        seen.add(page["url"])
+        pages.append(page)
+        queue += [u for u in dict.fromkeys(page["links"]) if _crawlable(u, host, prefix) and u not in seen]
+
+    lines = [f"크롤링: {start} · {len(pages)}페이지 읽음"
+             + (f" · robots.txt 로 막힌 {blocked}개 건너뜀" if blocked else "")
+             + (f" · 실패 {len(failed)}개" if failed else "")]
+    for p in pages:
+        text = p["text"]
+        lines.append(f"\n### [{p['title'] or p['url']}] {p['url']}\n{text[:chars_per_page]}"
+                     + ("\n…(이하 생략)" if len(text) > chars_per_page else ""))
+    rest = [u for u in dict.fromkeys(queue) if u not in seen][:15]
+    if rest:
+        lines.append("\n## 찾았지만 읽지 않은 링크\n" + "\n".join(f"- {u}" for u in rest))
+    if failed:
+        lines.append("\n## 읽지 못한 페이지\n" + "\n".join(f"- {f}" for f in failed[:10]))
+    return "\n".join(lines)
+
+
+TOOLS = {t.name: t for t in (chunk_stats, preview_chunks, chunk_document, ocr_report, reocr_pages, web_search, fetch_url,
+                             crawl_site)}

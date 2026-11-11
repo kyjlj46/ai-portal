@@ -314,6 +314,16 @@
   .answer th, .answer td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
   .answer th { background: var(--bg); }
   .answer blockquote { margin: 8px 0; padding-left: 10px; border-left: 3px solid var(--line); color: var(--muted); }
+  /* 코드: 블록은 가로 스크롤(줄바꿈하지 않음), 블록마다 복사 버튼 */
+  .answer code { font-family: ui-monospace, "Cascadia Code", Consolas, "D2Coding", monospace; font-size: .9em;
+                 background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; overflow-wrap: normal; }
+  .answer .codewrap { position: relative; margin: 8px 0; }
+  .answer pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+                overflow-x: auto; line-height: 1.5; }
+  .answer pre code { background: none; border: 0; padding: 0; font-size: 13px; white-space: pre; }
+  .answer .codecopy { position: absolute; top: 6px; right: 6px; font-size: 12px; padding: 2px 8px; border-radius: 6px;
+                      border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; opacity: .85; }
+  .answer .codecopy:hover, .answer .codecopy:focus-visible { opacity: 1; color: var(--text); }
   .doc-out { border-top: 1px solid var(--line); padding-top: 12px; }
   .cursor::after { content: "▍"; animation: blink 1s steps(1) infinite; color: var(--accent); }
   .err { color: var(--warn); white-space: pre-wrap; }
@@ -382,6 +392,12 @@
   .inputbox { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; background: var(--card);
               border: 1px solid var(--line); border-radius: 14px; padding: 8px 8px 8px 14px; }
   .inputbox:focus-within { border-color: var(--accent); }
+  .urlbar { max-width: 860px; margin: 0 auto 6px; display: flex; gap: 8px; align-items: center; background: var(--card);
+            border: 1px solid var(--line); border-radius: 12px; padding: 6px 12px; }
+  .urlbar[hidden] { display: none; }
+  .urlbar:focus-within { border-color: var(--accent); }
+  .urlbar label { flex: none; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .urlbar input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; padding: 4px 0; }
   #q { flex: 1; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit;
        max-height: 200px; padding: 4px 0; }
   #send { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--accent);
@@ -507,7 +523,7 @@
   <a class="btn" id="editApp" hidden>✏️ <span class="lbl">앱 편집</span></a>
   <button class="btn" id="marketBtn" aria-controls="marketPanel" aria-expanded="false" title="Agent 마켓 열기/닫기">🧩 <span class="lbl">Agent 마켓</span></button>
   <input type="file" id="folderFile" webkitdirectory multiple hidden>
-  <input type="file" id="file" multiple accept=".pdf,.docx,.doc,.rtf,.odt,.pptx,.ppt,.odp,.hwp,.hwpx,.txt,.md,.markdown,.csv,.tsv,.log,.json,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tif,.tiff" hidden>
+  <input type="file" id="file" multiple accept=".pdf,.docx,.doc,.rtf,.odt,.pptx,.ppt,.odp,.hwp,.hwpx,.txt,.md,.markdown,.csv,.tsv,.log,.json,.py,.js,.jsx,.ts,.tsx,.java,.kt,.go,.rs,.c,.h,.cpp,.hpp,.cs,.rb,.php,.swift,.scala,.sql,.sh,.ps1,.bat,.yaml,.yml,.toml,.ini,.cfg,.xml,.html,.css,.vue,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tif,.tiff" hidden>
   <div class="docinfo" id="docInfo"></div>
 </header>
 
@@ -527,6 +543,11 @@
 <input type="file" id="imgFile" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif,image/tiff" hidden>
 
 <footer class="composer" id="composer" hidden>
+  <div class="urlbar" id="urlbar" hidden>
+    <label for="url">🔗 URL</label>
+    <input id="url" type="text" inputmode="url" autocomplete="url" spellcheck="false"
+           placeholder="https://example.com/notice · 여러 개는 띄어쓰기로 (최대 5개)">
+  </div>
   <div class="inputbox">
     <textarea id="q" rows="1" placeholder="문서에 대해 질문하세요"></textarea>
     <button id="send" title="보내기 (Enter)">↑</button>
@@ -612,12 +633,13 @@ let market = [], marketCats = [], apps = [];
 function appAgent(a) {
   return { id: `app:${a.id}`, appId: a.id, name: a.name, icon: a.icon, description: a.description || `Agent ${a.agents.length}개로 만든 앱`,
            doc: a.doc, mode: "chat", group: "내 앱", intro: a.description, examples: a.examples, team: a.agents, fields: [],
-           run: a.run || "pipeline" };
+           run: a.run || "pipeline", needsUrl: a.agents.some(id => market.find(m => m.id === id)?.needs_url) };
 }
 function marketAgent(m) {
   return { id: `m:${m.id}`, name: m.name, icon: m.icon, description: m.description,
            doc: m.on_upload ? "required" : m.uses_doc ? "optional" : "none",
-           mode: "chat", group: "마켓", intro: m.description, examples: m.examples, fields: [], autoRun: m.on_upload || "" };
+           mode: "chat", group: "마켓", intro: m.description, examples: m.examples, fields: [], autoRun: m.on_upload || "",
+           needsUrl: !!m.needs_url };
 }
 function navAgents() { return [...agents, ...apps.map(appAgent)]; }
 function allAgents() { return [...navAgents(), ...market.filter(m => !m.route).map(marketAgent)]; }
@@ -633,9 +655,10 @@ function route() {
   const next = recentId || build || maker ? null : findAgent(id);
   const leaving = next !== agent || recentId || build || maker;
   if (busy && controller && leaving) controller.abort();
-  if (leaving) { $("q").value = ""; autosize(); image = null; }  // 다른 화면으로 가면 쓰던 입력·이미지를 비운다
+  if (leaving) { $("q").value = ""; $("url").value = ""; autosize(); image = null; }  // 다른 화면으로 가면 쓰던 입력·이미지를 비운다
   agent = next;
   const mode = agent?.mode, usesDoc = !!agent && agent.doc !== "none";
+  $("urlbar").hidden = !agent?.needsUrl;  // 웹 크롤링 Agent (또는 그것을 담은 앱) 는 URL 입력창
   $("home").hidden = !!agent || !!recentId || !!build || !!maker;
   $("chat").hidden = (!agent && !recentId) || mode === "game";
   $("composer").hidden = !agent || mode === "game";
@@ -984,7 +1007,7 @@ const MAKER_IDEAS = [
   "주제를 주면 최신 웹 정보를 찾아 경영진용 3줄 브리핑과 출처를 정리",
   "회의록 여러 개를 올리면 결정 사항과 미결 이슈를 한 표로 모아 정리",
 ];
-const TOOL_NAMES = { web_search: "🌍 웹 검색", fetch_url: "📄 웹 페이지 읽기" };
+const TOOL_NAMES = { web_search: "🌍 웹 검색", fetch_url: "📄 웹 페이지 읽기", crawl_site: "🕸️ 사이트 크롤링" };
 
 async function showMaker(agentId) {
   const root = $("maker");
@@ -1756,6 +1779,12 @@ function showEmpty() {
   }
   box.append(chips);
   $("thread").replaceChildren(box);
+  if (agent.needsUrl) {
+    box.insertBefore(el("div", "fhelp", "🔗 아래 URL 칸에 웹페이지 주소를 넣고, 무엇을 할지 적으세요. 비워 두면 내용을 정리합니다."), chips);
+    setComposer("URL 을 넣고 요청하세요 (예: 공지 목록을 표로 정리해줘)",
+                "Enter 보내기 · 같은 URL 로 이어서 요청하면 앞의 대화를 기억합니다 · URL 을 바꾸면 새로 읽습니다");
+    return;
+  }
   setComposer(agent.id === "qa" ? "문서에 대해 질문하세요" : `${agent.name}에게 요청하세요`,
               "Enter 보내기 · Shift+Enter 줄바꿈 · 이어서 요청하면 앞의 대화를 기억합니다");
 }
@@ -1855,6 +1884,7 @@ function newChat(silent) {
   closeAsk();
   fetch(`/api/conversations/${convId}`, { method: "DELETE" }).catch(() => {});
   convId = newId();
+  sentUrls = "";  // 새 대화에서는 URL 을 다시 보낸다
   loadDocs();
   showEmpty();
   if (!silent) $("q").focus();
@@ -1932,18 +1962,43 @@ function setBusy(on) {
   document.querySelectorAll(".formcard .btn.primary").forEach(btn => { btn.disabled = on; });
   updateSend();
 }
-function updateSend() { $("send").disabled = !busy && !$("q").value.trim(); }
+function updateSend() {
+  const hasUrl = !!agent?.needsUrl && !!$("url").value.trim() && $("url").value.trim() !== sentUrls;
+  $("send").disabled = !busy && !$("q").value.trim() && !hasUrl;
+}
+
+// URL 입력창: 같은 대화에서 이미 보낸 URL 은 다시 보내지 않는다 (이어서 요청할 때 매번 다시 읽지 않도록)
+let sentUrls = "";
+function parseUrls(text) { return [...new Set(text.split(/[\s,]+/).filter(Boolean))]; }
+$("url").addEventListener("input", updateSend);
+$("url").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+  e.preventDefault();
+  if (!busy) send();
+});
 
 // 입력창: 채팅형은 질문, 양식형은 (결과 전) 자유 요청 / (결과 후) 수정 요청
 function send() {
   if (busy) { controller?.abort(); return; }
   const question = $("q").value.trim();
-  if (!question) return;
+  let urls = [];
+  if (agent.needsUrl && !(pendingAsk && pendingAsk.agent === agent.id)) {
+    urls = parseUrls($("url").value);
+    const bad = urls.find(u => !/^https?:\/\/[^\s/]+\.[^\s]+/i.test(u));
+    if (bad) { addNote(`URL 을 확인해 주세요: ${bad} (http:// 또는 https:// 로 시작)`); $("url").focus(); return; }
+    if (urls.length > 5) { addNote("URL 은 한 번에 5개까지 넣을 수 있습니다."); $("url").focus(); return; }
+    if (urls.join(" ") === sentUrls) urls = [];  // 같은 URL 로 이어서 요청 → 앞 대화에서 읽은 내용을 쓴다
+    if (!urls.length && !sentUrls && !/https?:\/\//i.test(question)) {
+      addNote("위의 🔗 URL 칸에 웹페이지 주소를 넣어 주세요."); $("url").focus(); return;
+    }
+    if (!question && !urls.length) return;
+  } else if (!question) return;
   if (pendingAsk && pendingAsk.agent === agent.id) { $("q").value = ""; autosize(); answerAsk(question); return; }
   if (agent.mode === "image" && !image) { addNote("먼저 이미지를 올려 주세요 (끌어다 놓기 · 고르기 · Ctrl+V)."); return; }
   $("q").value = ""; autosize();
   if (agent.mode === "form" || agent.mode === "image") $("thread").querySelector(".formcard")?.remove();
-  run({ question }, question);
+  if (urls.length) run({ question, urls }, `🔗 ${urls.join("\n🔗 ")}\n${question || "이 페이지의 내용을 정리해 주세요."}`);
+  else run({ question }, question);
 }
 
 async function run(body, userText) {
@@ -1978,6 +2033,7 @@ async function run(body, userText) {
         b.draft = ""; b.ans.classList.remove("cursor"); b.ans.innerHTML = '<span class="spinner"></span>';
       } else if (ev.type === "final") {
         gotFinal = true;
+        if (body.urls) { sentUrls = body.urls.join(" "); updateSend(); }  // 읽기에 성공한 URL 은 이어지는 요청에서 다시 보내지 않는다
         b.ans.classList.remove("cursor");
         renderAnswer(b, ev.answer);
         const subject = current.mode === "image" ? body.image_name
@@ -2372,13 +2428,29 @@ function renderAnswer(b, text) {
   if (window.marked && window.DOMPurify) {
     a.className = "answer";
     a.innerHTML = DOMPurify.sanitize(marked.parse(text));
+    for (const pre of a.querySelectorAll("pre")) {  // 코드 블록마다 복사 버튼
+      const wrap = el("div", "codewrap");
+      pre.replaceWith(wrap);
+      const btn = el("button", "codecopy", "복사"); btn.type = "button";
+      const lang = (pre.querySelector("code")?.className.match(/language-(\S+)/) || [])[1];
+      btn.setAttribute("aria-label", `${lang ? lang + " " : ""}코드 복사`);
+      btn.onclick = async () => {
+        try { await navigator.clipboard.writeText(pre.innerText.replace(/\n$/, "")); btn.textContent = "✓ 복사됨"; }
+        catch { btn.textContent = "복사 실패"; }
+        setTimeout(() => { btn.textContent = "복사"; }, 1500);
+      };
+      wrap.append(pre, btn);
+    }
   } else {
     a.className = "answer plain";
     a.textContent = text;
   }
   const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
   const nodes = [];
-  while (walker.nextNode()) if (/\((?:D\d+\s*)?p\.\s*\d+/.test(walker.currentNode.nodeValue)) nodes.push(walker.currentNode);
+  while (walker.nextNode()) {
+    if (walker.currentNode.parentElement?.closest("pre, code")) continue;  // 코드 안의 글자는 출처 배지로 바꾸지 않는다
+    if (/\((?:D\d+\s*)?p\.\s*\d+/.test(walker.currentNode.nodeValue)) nodes.push(walker.currentNode);
+  }
   // (p.3, p.5) · (p.5-6) 한 문서 / (D1 p.3, D2 p.5) 여러 문서 — 표시가 없는 페이지는 앞 문서를 따른다
   const cite = /\(((?:D\d+\s*)?p\.\s*\d+(?:\s*[,~\-–]\s*(?:(?:D\d+\s*)?p\.\s*)?\d+)*)\)/g;
   for (const node of nodes) {

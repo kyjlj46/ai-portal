@@ -118,6 +118,9 @@ def web_sources(messages: list) -> list[tuple[str, str]]:
             continue
         if m.name == "fetch_url" and (hit := re.match(r"\[(.*?)\] (https?://\S+)", m.text)):
             read.setdefault(hit.group(2), hit.group(1).strip() or hit.group(2))
+        elif m.name == "crawl_site":  # 읽은 페이지마다 '### [제목] 주소'
+            for title, url in re.findall(r"^### \[(.*?)\] (https?://\S+)", m.text, re.M):
+                read.setdefault(url, title.strip() or url)
         elif m.name == "web_search":
             for title, url in re.findall(r"^\[\d+\] (.+)\n(https?://\S+)", m.text, re.M):
                 found.setdefault(url, title.strip())
@@ -191,7 +194,8 @@ def stages(agent_ids: list[str]) -> list[list[str]]:
 
 TOOL_NAMES = {
     "search_chunks": "문서 검색", "read_page": "페이지 읽기", "get_chunk_context": "앞뒤 문맥", "document_outline": "구성 보기",
-    "web_search": "웹 검색", "fetch_url": "웹 페이지 읽기", "chunk_stats": "청킹 통계", "preview_chunks": "청크 보기",
+    "web_search": "웹 검색", "fetch_url": "웹 페이지 읽기", "crawl_site": "사이트 크롤링", "chunk_stats": "청킹 통계",
+    "preview_chunks": "청크 보기",
     "chunk_document": "다시 청킹", "ocr_report": "OCR 보고", "reocr_pages": "다시 OCR",
 }
 
@@ -474,6 +478,8 @@ def _describe_call(name: str, args: dict, sub: bool) -> dict:
         return _step("search", f"웹 검색: “{args.get('query', '')}”", sub)
     if name == "fetch_url":
         return _step("read", f"페이지 읽기: {str(args.get('url', ''))[:90]}", sub)
+    if name == "crawl_site":
+        return _step("read", f"사이트 크롤링: {str(args.get('url', ''))[:90]} (최대 {args.get('max_pages', 5)}페이지)", sub)
     if name == "task":
         from .market import BY_ID
 
@@ -499,6 +505,8 @@ def _describe_result(msg: ToolMessage, sub: bool) -> dict | None:
         return _step("result", f"→ 검색 결과 {hits}개" if hits else f"→ {text[:80]}", sub)
     if msg.name == "fetch_url":
         return _step("result", f"→ {len(text):,}자 읽음" if text.startswith(("[", "http")) else f"→ {text[:80]}", sub)
+    if msg.name == "crawl_site":
+        return _step("result", "→ " + text.splitlines()[0][:100], sub)
     if msg.name in ("chunk_document", "reocr_pages"):
         return _step("result", "→ " + text.strip().splitlines()[0][:100], sub)
     return None

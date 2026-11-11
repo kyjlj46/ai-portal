@@ -23,7 +23,11 @@ PDF_EXTS = {".pdf"}
 WORD_EXTS = {".docx", ".doc", ".rtf", ".odt"}
 PPT_EXTS = {".pptx", ".ppt", ".odp"}
 HWP_EXTS = {".hwp", ".hwpx"}
-TEXT_EXTS = {".txt", ".md", ".markdown", ".csv", ".tsv", ".log", ".json"}
+# 소스 코드는 텍스트 문서로 읽는다 (코드 어시스턴트가 리뷰·설명할 수 있게)
+CODE_EXTS = {".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".go", ".rs", ".c", ".h", ".cpp", ".hpp", ".cs",
+             ".rb", ".php", ".swift", ".scala", ".sql", ".sh", ".ps1", ".bat", ".yaml", ".yml", ".toml", ".ini", ".cfg",
+             ".xml", ".html", ".css", ".vue"}
+TEXT_EXTS = {".txt", ".md", ".markdown", ".csv", ".tsv", ".log", ".json"} | CODE_EXTS
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}  # 스캔 이미지 → PDF 로 바꿔 OCR
 SUPPORTED_EXTS = PDF_EXTS | WORD_EXTS | PPT_EXTS | HWP_EXTS | TEXT_EXTS | IMAGE_EXTS
 

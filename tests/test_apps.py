@@ -23,9 +23,9 @@ def test_market_lists_ten_new_agents_and_building_blocks(client):
     data = client.get("/api/market").json()
     items = {m["id"]: m for m in data["agents"]}
     new = [m for m in data["agents"] if m["new"]]
-    assert len(new) == 14
+    assert len(new) == 16
     assert {"translator", "proofreader", "email", "minutes", "action_items", "keywords", "sentiment", "swot", "slides", "sql",
-            "quick_summary", "chunker", "ocr", "web_search"} == {m["id"] for m in new}
+            "quick_summary", "chunker", "ocr", "web_search", "crawler", "code_assistant"} == {m["id"] for m in new}
     assert items["quick_summary"]["on_upload"] and items["chunker"]["on_upload"] and items["ocr"]["on_upload"]
     assert items["web_search"]["on_upload"] == "" and items["web_search"]["category"] == "리서치"
     assert items["doc_search"]["route"] == "qa" and items["summary"]["route"] == "summary"  # 기존 기능도 부품으로
